@@ -9,6 +9,7 @@ services:
     volumes:
       - .:/src
       - /Users/alexb/work/ip-block-designs/ddr:/ddr
+      - /Users/alexb/work/repos/duh-bus:/bus-defs
     ports:
       - 8888:8888
 
