@@ -131,7 +131,7 @@ class BusDef(object):
     @property
     def opt_ports(self): return list(self._opt_ports)
     
-    def words_from_name(port_name):
+    def words_from_name(self, port_name):
         return [
             self.bus_type.name, 
             #self.bus_type.library, 
