@@ -1,4 +1,5 @@
 import numpy as np
+import operator
 import cvxopt
 from collections import Counter
 from cvxopt import matrix, solvers
@@ -9,12 +10,6 @@ from . import util
 from .busdef import BusDef
 
 solvers.options['show_progress'] = False
-
-# cost weights
-# uniform for now
-NAME_W = 1
-WIDTH_W = 1
-DIR_W = 1
 
 def get_mapping_fcost(ports, bus_def):
     """
@@ -65,7 +60,7 @@ def get_mapping_fcost(ports, bus_def):
         return sum([cnts[k] for k in keys])
 
     # try coarser matches requiring just direction to match
-    cost = 0
+    cost = MatchCost.zero()
     for keys in [in_keys, out_keys]:
         ppc = sum_across(keys, phy_port_cnts)
         brc = sum_across(keys, bus_req_port_cnts)
@@ -76,8 +71,8 @@ def get_mapping_fcost(ports, bus_def):
         ppc -= num_dir_matched
         brc -= num_dir_matched
         
-        cost += (WIDTH_W)*num_dir_matched
-        cost += (WIDTH_W+DIR_W)*brc
+        cost += MatchCost(0,1,0)*num_dir_matched
+        cost += MatchCost(0,1,1)*brc
 
         # then match optional ports (no cost for unmatched optional bus
         # ports)
@@ -86,11 +81,15 @@ def get_mapping_fcost(ports, bus_def):
         boc -= num_dir_matched
 
         # the rest of the unmatched ports
-        cost += (WIDTH_W)*num_dir_matched
-        cost += (WIDTH_W+DIR_W)*ppc
+        cost += MatchCost(0,1,0)*num_dir_matched
+        cost += MatchCost(0,1,1)*ppc
     return cost
 
 def map_ports_to_bus(ports, bus_def):
+    """
+    optimally map ports to bus definition {req, opt} ports by formulating
+    as a convex LP and solving
+    """
     # get cost functions from closure, which takes into account specifics of
     # bus_def
     match_cost, mapping_cost = get_cost_funcs(ports, bus_def)
@@ -103,7 +102,10 @@ def map_ports_to_bus(ports, bus_def):
     C = np.zeros((m, n))
     for i, p1 in enumerate(ports1):
         for j, p2 in enumerate(ports2):
-            C[i,j] = match_cost(p1, p2)
+            C[i,j] = match_cost(p1, p2).value
+
+    # swap phy ports with bus def so that the columns are always the ones
+    # underdetermined
     swap = False
     if m > n:
         swap = True
@@ -123,8 +125,8 @@ def map_ports_to_bus(ports, bus_def):
             cvx_sum(x[i*n:i*n+n]) == 1
         )
         
-    # add constraints so max number of assignments 
-    # to each port in ports2 is 1 as well
+    # add constraints so max number of assignments to each port in ports2
+    # is 1 as well
     for j in range(n):
         #print(list(range(j, m*n, n)))
         constraints.append(
@@ -142,6 +144,9 @@ def map_ports_to_bus(ports, bus_def):
     cost = mapping_cost(mapping, ports, bus_def)
     return cost, mapping, match_cost
 
+#--------------------------------------------------------------------------
+# helpers for computing cost function
+#--------------------------------------------------------------------------
 def get_cost_funcs(ports, bus_def):
     """
     determine cost functions in a closure with access to bus_def
@@ -161,23 +166,117 @@ def get_cost_funcs(ports, bus_def):
         for b_word in b_words:
             cost_n += min(map(lambda w: name_dist(b_word, w), p_words))
         
-        return (
+        return MatchCost(
             # name attr mismatch
-            NAME_W*cost_n + 
+            cost_n,
             # width mismatch
-            WIDTH_W*(phy_port[1] != bus_port[1]) +
+            (phy_port[1] != bus_port[1]),
             # direction mismatch
-            DIR_W*(phy_port[2] != bus_port[2])
+            (phy_port[2] != bus_port[2]),
         )
     
-    def mapping_cost_func(mapping, ports, busdef):
+    # NOTE this function closure actually includes the match_cost_func defined
+    # above
+    def mapping_cost_func(mapping, ports, bus_def):
         umap_ports = set(ports) - set(mapping.keys())
-        umap_busports = set(busdef.req_ports) - set(mapping.values())
-        cost = 0
-        cost += sum([match_cost(p1, p2) for p1, p2 in mapping.items()])
+        umap_busports = set(bus_def.req_ports) - set(mapping.values())
+        cost = MatchCost.zero()
+        cost += sum([match_cost_func(p1, p2) for p1, p2 in mapping.items()])
         nil_port = ('', None, None)
-        cost += sum([match_cost(nil_port, p) for p in umap_ports])
-        cost += sum([match_cost(nil_port, p) for p in umap_busports])
+        cost += sum([match_cost_func(nil_port, p) for p in umap_ports])
+        cost += sum([match_cost_func(nil_port, p) for p in umap_busports])
         return cost
 
     return match_cost_func, mapping_cost_func
+
+
+def MAKE_BINARY(opfn):
+    def op_func(self, other):
+        if type(other) != MatchCost:
+            return MatchCost(
+                opfn(self.nc, other),
+                opfn(self.wc, other),
+                opfn(self.dc, other),
+             )
+        else:
+            #assert type(other) == MatchCost, \
+            #    "unexpected operator type {} with MatchCost".format(type(other))
+            return MatchCost(
+                opfn(self.nc, other.nc),
+                opfn(self.wc, other.wc),
+                opfn(self.dc, other.dc),
+            )
+    return op_func
+
+MAKE_RBINARY = lambda opfn : lambda self, other : MatchCost(
+    opfn(other, self.nc),
+    opfn(other, self.wc),
+    opfn(other, self.dc),
+)
+MAKE_COMPARATOR = lambda opfn : lambda self, other : opfn(self.value, other.value)
+
+class MatchCost(object):    
+    __add__  = MAKE_BINARY(operator.add)
+    __sub__  = MAKE_BINARY(operator.sub)
+    __mul__  = MAKE_BINARY(operator.mul)
+    __iadd__  = MAKE_BINARY(operator.add)
+    __isub__  = MAKE_BINARY(operator.sub)
+    __imul__  = MAKE_BINARY(operator.mul)
+    __radd__ = MAKE_RBINARY(operator.add)
+    __rsub__ = MAKE_RBINARY(operator.sub)
+    __rmul__ = MAKE_RBINARY(operator.mul)
+    __lt__ = MAKE_COMPARATOR(operator.__lt__)
+    __le__ = MAKE_COMPARATOR(operator.__le__)
+    __gt__ = MAKE_COMPARATOR(operator.__gt__)
+    __ge__ = MAKE_COMPARATOR(operator.__ge__)
+
+    def __eq__(self, other):
+        return (
+            self.nc == other.nc and
+            self.wc == other.wc and
+            self.dc == other.dc
+        )
+    def __ne__(self, other):
+        return (
+            self.nc != other.nc or
+            self.wc != other.wc or
+            self.dc != other.dc
+        )
+
+    # cost weights # uniform for now
+    NAME_W = 1
+    WIDTH_W = 1
+    DIR_W = 1
+
+    def __neg__(self, other):
+        return MatchCost(
+            -self.nc,
+            -self.wc,
+            -self.dc,
+        )
+
+    @classmethod
+    def zero(cls):
+        return cls(0,0,0)
+
+    @property
+    def value(self):
+        return (
+            self.NAME_W*self.nc + 
+            self.WIDTH_W*self.wc + 
+            self.DIR_W*self.dc
+        )
+
+    def __init__(self, nc, wc, dc):
+        self.nc = nc
+        self.wc = wc
+        self.dc = dc
+
+    def __str__(self):
+        return '{}(n:{};w:{};d:{})'.format(
+		    self.value,
+            self.nc,
+            self.wc,
+            self.dc,
+        )
+
