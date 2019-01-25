@@ -1,5 +1,6 @@
 import numpy as np
 import cvxopt
+from collections import Counter
 from cvxopt import matrix, solvers
 from cvxopt.modeling import variable, dot, op
 from cvxopt.modeling import sum as cvx_sum
@@ -8,6 +9,86 @@ from . import util
 from .busdef import BusDef
 
 solvers.options['show_progress'] = False
+
+# cost weights
+# uniform for now
+NAME_W = 1
+WIDTH_W = 1
+DIR_W = 1
+
+def get_mapping_fcost(ports, bus_def):
+    """
+    coarse cost function to cheaply estimate how good a potential mapping
+    will be
+    """
+    # TODO can assign some cost to the closeness of the port name
+    # alphabets (include name/library for bus def)
+    
+    # strip name and just match based off of width+direction
+    phy_port_cnts = Counter(map(lambda x: tuple(x[1:]), ports))
+    bus_req_port_cnts = Counter(map(lambda x: tuple(x[1:]), bus_def.req_ports))
+    bus_opt_port_cnts = Counter(map(lambda x: tuple(x[1:]), bus_def.opt_ports))
+
+    ds = [
+        phy_port_cnts,
+        bus_req_port_cnts,
+        bus_opt_port_cnts,
+    ]
+    allkeys = []
+    for d in ds:
+        allkeys.extend(d.keys())
+
+    for k in allkeys:
+        ppc = phy_port_cnts[k]
+        brc = bus_req_port_cnts[k]
+        boc = bus_opt_port_cnts[k]
+
+        # first match required ports
+        num_matched = min(ppc, brc)
+        ppc -= num_matched
+        brc -= num_matched
+
+        # then match optional ports
+        num_matched = min(ppc, boc)
+        ppc -= num_matched
+        boc -= num_matched
+
+        # update counts with unmatched info
+        phy_port_cnts[k]     = ppc
+        bus_req_port_cnts[k] = brc
+        bus_opt_port_cnts[k] = boc
+
+    in_keys  = filter(lambda x:x[-1] == np.sign( 1), allkeys)
+    out_keys = filter(lambda x:x[-1] == np.sign(-1), allkeys)
+
+    def sum_across(keys, cnts):
+        return sum([cnts[k] for k in keys])
+
+    # try coarser matches requiring just direction to match
+    cost = 0
+    for keys in [in_keys, out_keys]:
+        ppc = sum_across(keys, phy_port_cnts)
+        brc = sum_across(keys, bus_req_port_cnts)
+        boc = sum_across(keys, bus_opt_port_cnts)
+
+        # first match required ports
+        num_dir_matched = min(ppc, brc)
+        ppc -= num_dir_matched
+        brc -= num_dir_matched
+        
+        cost += (WIDTH_W)*num_dir_matched
+        cost += (WIDTH_W+DIR_W)*brc
+
+        # then match optional ports (no cost for unmatched optional bus
+        # ports)
+        num_dir_matched = min(ppc, boc)
+        ppc -= num_dir_matched
+        boc -= num_dir_matched
+
+        # the rest of the unmatched ports
+        cost += (WIDTH_W)*num_dir_matched
+        cost += (WIDTH_W+DIR_W)*ppc
+    return cost
 
 def map_ports_to_bus(ports, bus_def):
     # get cost functions from closure, which takes into account specifics of
@@ -59,7 +140,7 @@ def map_ports_to_bus(ports, bus_def):
     if swap:
         mapping = {v:k for k, v in mapping.items()}
     cost = mapping_cost(mapping, ports, bus_def)
-    return cost, mapping
+    return cost, mapping, match_cost
 
 def get_cost_funcs(ports, bus_def):
     """
@@ -69,8 +150,8 @@ def get_cost_funcs(ports, bus_def):
     def match_cost_func(phy_port, bus_port):
         
         def name_dist(w1, w2):
-            #return ed.eval(w1, w2)
-            return ed.eval(w1, w2) / max(len(w1), len(w2))
+            return ed.eval(w1, w2)
+            #return ed.eval(w1, w2) / max(len(w1), len(w2))
     
         # FIXME for now hardcode in functions that are used to get words from name
         # for both ports and buses
@@ -82,11 +163,11 @@ def get_cost_funcs(ports, bus_def):
         
         return (
             # name attr mismatch
-            cost_n + 
+            NAME_W*cost_n + 
             # width mismatch
-            1*(phy_port[1] != bus_port[1]) +
+            WIDTH_W*(phy_port[1] != bus_port[1]) +
             # direction mismatch
-            1*(phy_port[2] != bus_port[2])
+            DIR_W*(phy_port[2] != bus_port[2])
         )
     
     def mapping_cost_func(mapping, ports, busdef):

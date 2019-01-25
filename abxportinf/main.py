@@ -26,34 +26,60 @@ def get_bus_defs(spec_path):
     
     return BusDef.bus_defs_from_spec(spec_path)
 
+def get_test_port_group(ports):
+    pg, Z, wire_names = get_port_grouper(ports)
+    for ii, port in enumerate(ports):
+        if port[0] != 'axi0_BREADY':
+            continue
+        for i, port_group in enumerate(pg.get_port_groups(port)):
+            if len(port_group) == 21:
+                return port_group
+    die
+
 def get_bus_matches(ports, bus_defs):
     pg, Z, wire_names = get_port_grouper(ports)
 
     assn_ports = set()
     all_bus_mappings = []
     for ii, port in enumerate(ports):
-        #if port[0] != 'axi0_BREADY':
-        #    continue
 
         if ii % 10 == 0:
             print('{}/{} {}'.format(ii, len(ports), port))
+
+        if port[0] != 'axi0_BREADY':
+            continue
+
         # do not reassign portsonly assign ports to a single bus definition
         if port in assn_ports: 
             continue
         mappings = []
         ccost = None
         for i, port_group in enumerate(pg.get_port_groups(port)):
-            (cost, mapping), bus_def = min([
+            if i == 0:
+                continue
+            # FIXME uncomment
+            #(cost, mapping), bus_def = min([
+            #    (map_ports_to_bus(port_group, bus_def), bus_def) for bus_def in bus_defs 
+            #])
+            #mappings.append((cost, bus_def, mapping))
+            #print('cost {}, port group size {}, size of mapping {}'.format(
+            #    cost, len(port_group), len(mapping)))
+            mappings.extend([
                 (map_ports_to_bus(port_group, bus_def), bus_def) for bus_def in bus_defs 
             ])
-            mappings.append((cost, bus_def, mapping))
-            if ccost and cost > ccost:
+            if len(port_group) == 21:
                 break
-            ccost = cost
-        min_mapping = min(mappings)
-        all_bus_mappings.append(min_mapping)
-        # do not reassign ports already assigned to their 'best' bus mapping
-        _, _, cmapping = min_mapping
-        assn_ports |= set(cmapping.keys())
+            # FIXME uncomment
+            #if ccost and cost > ccost:
+            #    break
+            #ccost = cost
+        all_bus_mappings.extend(mappings)
+        # FIXME uncomment
+        #min_mapping = min(mappings)
+        #all_bus_mappings.append(min_mapping)
+        ## do not reassign ports already assigned to their 'best' bus mapping
+        #_, _, cmapping = min_mapping
+        #assn_ports |= set(cmapping.keys())
 
-    return sorted(all_bus_mappings)
+    return all_bus_mappings
+    #return sorted(all_bus_mappings)

@@ -113,7 +113,8 @@ class BusDef(object):
                 continue
                 
             width = None if 'width' not in subportdef else int(subportdef['width'])
-            direction = np.sign(1) if subportdef['direction'] == 'out' else np.sign(-1)
+            #direction = np.sign(-1) if subportdef['direction'] == 'in' else np.sign(1)
+            direction = np.sign(1) if subportdef['direction'] == 'in' else np.sign(-1)
             desc = (logical_name, width, direction)
             if subportdef['presence'] == 'required':
                 req_port_map[type_key] = desc
