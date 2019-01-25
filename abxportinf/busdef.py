@@ -139,6 +139,12 @@ class BusDef(object):
             port_name,
         ]
     
+    def __str__(self):
+        return 'bus_def{{\n\tbus_type:{},\n\tabstract_type:{},\n\tdriver_type:{}\n}}'.format(
+            self.bus_type,
+            self.abstract_type, 
+            self.driver_type,
+        )
     def __init__(
         self,
         bus_type,

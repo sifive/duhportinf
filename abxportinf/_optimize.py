@@ -16,6 +16,9 @@ def get_mapping_fcost(ports, bus_def):
     coarse cost function to cheaply estimate how good a potential mapping
     will be
     """
+    def sum_across(keys, cnts):
+        return sum([cnts[k] for k in keys])
+
     # TODO can assign some cost to the closeness of the port name
     # alphabets (include name/library for bus def)
     
@@ -29,9 +32,9 @@ def get_mapping_fcost(ports, bus_def):
         bus_req_port_cnts,
         bus_opt_port_cnts,
     ]
-    allkeys = []
+    allkeys = set()
     for d in ds:
-        allkeys.extend(d.keys())
+        allkeys |= set(d.keys())
 
     for k in allkeys:
         ppc = phy_port_cnts[k]
@@ -53,15 +56,12 @@ def get_mapping_fcost(ports, bus_def):
         bus_req_port_cnts[k] = brc
         bus_opt_port_cnts[k] = boc
 
-    in_keys  = filter(lambda x:x[-1] == np.sign( 1), allkeys)
-    out_keys = filter(lambda x:x[-1] == np.sign(-1), allkeys)
-
-    def sum_across(keys, cnts):
-        return sum([cnts[k] for k in keys])
+    in_keys  = list(filter(lambda x:x[-1] == np.sign( 1), allkeys))
+    out_keys = list(filter(lambda x:x[-1] == np.sign(-1), allkeys))
 
     # try coarser matches requiring just direction to match
     cost = MatchCost.zero()
-    for keys in [in_keys, out_keys]:
+    for (d, keys) in [('in', in_keys), ('out', out_keys)]:
         ppc = sum_across(keys, phy_port_cnts)
         brc = sum_across(keys, bus_req_port_cnts)
         boc = sum_across(keys, bus_opt_port_cnts)
@@ -83,6 +83,7 @@ def get_mapping_fcost(ports, bus_def):
         # the rest of the unmatched ports
         cost += MatchCost(0,1,0)*num_dir_matched
         cost += MatchCost(0,1,1)*ppc
+
     return cost
 
 def map_ports_to_bus(ports, bus_def):
@@ -182,9 +183,9 @@ def get_cost_funcs(ports, bus_def):
         umap_busports = set(bus_def.req_ports) - set(mapping.values())
         cost = MatchCost.zero()
         cost += sum([match_cost_func(p1, p2) for p1, p2 in mapping.items()])
-        nil_port = ('', None, None)
-        cost += sum([match_cost_func(nil_port, p) for p in umap_ports])
-        cost += sum([match_cost_func(nil_port, p) for p in umap_busports])
+        # penalize only width+direction for unmapped ports
+        cost += MatchCost(0,1,1)*len(umap_ports)
+        cost += MatchCost(0,1,1)*len(umap_busports)
         return cost
 
     return match_cost_func, mapping_cost_func
