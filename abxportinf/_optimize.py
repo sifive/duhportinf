@@ -72,7 +72,8 @@ def get_mapping_fcost(ports, bus_def):
         brc -= num_dir_matched
         
         cost += MatchCost(0,1,0)*num_dir_matched
-        cost += MatchCost(0,1,1)*brc
+        # add harsh penalty for unmatched bus ports
+        cost += 4*MatchCost(0,1,1)*brc
 
         # then match optional ports (no cost for unmatched optional bus
         # ports)
@@ -133,10 +134,13 @@ def map_ports_to_bus(ports, bus_def):
         constraints.append(
             cvx_sum([x[jj] for jj in range(j, m*n, n)]) <= 1
         )
+
+    # NOTE mus use external solver (such as glpk), the default one is
+    # _very_ slow
     op(
         dot(c, x),
         constraints,
-    ).solve()
+    ).solve(solver='glpk')
     X = np.array(x.value).reshape(m,n) > 0.01
     
     mapping = {ports1[i] : ports2[j] for i, j in np.argwhere(X)}

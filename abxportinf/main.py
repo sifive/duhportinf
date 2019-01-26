@@ -2,9 +2,12 @@ import os
 import numpy as np
 import json5
 from .busdef import BusDef
-from ._optimize import map_ports_to_bus
+from ._optimize import map_ports_to_bus, get_mapping_fcost
 from ._grouper import get_port_grouper
 from . import busdef
+
+# FIXME remove
+import time
 
 def get_ports_from_json5(comp_json5_path):
     with open(comp_json5_path) as fin:
@@ -26,60 +29,84 @@ def get_bus_defs(spec_path):
     
     return BusDef.bus_defs_from_spec(spec_path)
 
-def get_test_port_group(ports):
-    pg, Z, wire_names = get_port_grouper(ports)
-    for ii, port in enumerate(ports):
-        if port[0] != 'axi0_BREADY':
-            continue
-        for i, port_group in enumerate(pg.get_port_groups(port)):
-            if len(port_group) == 21:
-                return port_group
-    die
-
 def get_bus_matches(ports, bus_defs):
     pg, Z, wire_names = get_port_grouper(ports)
-
-    assn_ports = set()
-    all_bus_mappings = []
-    for ii, port in enumerate(ports):
-
-        if ii % 10 == 0:
-            print('{}/{} {}'.format(ii, len(ports), port))
-
-        if port[0] != 'axi0_BREADY':
+    
+    # pass over all port groups and compute fcost to prioritize potential
+    # bus pairings to optimize
+    pg_bus_pairings = []
+    for port_group in pg.get_port_groups():
+        if len(port_group) < 20:
             continue
-
-        # do not reassign portsonly assign ports to a single bus definition
-        if port in assn_ports: 
+        
+        # for each port group, only pair the 5 bus defs with the lowest fcost
+        pg_bus_defs = list(sorted(
+            [(get_mapping_fcost(port_group, bus_def), bus_def) for bus_def in bus_defs],
+            key=lambda x:x[0].value,
+        ))[:5]
+        pg_bus_pairings.append((port_group, pg_bus_defs))
+    
+    # perform bus mappings for chosen subset
+    pg_bus_mappings = []
+    stime = time.time()
+    for i, (port_group, bus_defs) in enumerate(pg_bus_pairings):
+        #print('{}/{}, {}s'.format(i, len(pg_bus_pairings), time.time()-stime))
+        #print('  - size port_group', len(port_group))
+        if len(port_group) > 60:
+            #print('    - skipping large')
             continue
-        mappings = []
-        ccost = None
-        for i, port_group in enumerate(pg.get_port_groups(port)):
-            if i == 0:
-                continue
-            # FIXME uncomment
-            #(cost, mapping), bus_def = min([
-            #    (map_ports_to_bus(port_group, bus_def), bus_def) for bus_def in bus_defs 
-            #])
-            #mappings.append((cost, bus_def, mapping))
-            #print('cost {}, port group size {}, size of mapping {}'.format(
-            #    cost, len(port_group), len(mapping)))
-            mappings.extend([
-                (map_ports_to_bus(port_group, bus_def), bus_def) for bus_def in bus_defs 
-            ])
-            if len(port_group) == 21:
-                break
-            # FIXME uncomment
-            #if ccost and cost > ccost:
-            #    break
-            #ccost = cost
-        all_bus_mappings.extend(mappings)
-        # FIXME uncomment
-        #min_mapping = min(mappings)
-        #all_bus_mappings.append(min_mapping)
-        ## do not reassign ports already assigned to their 'best' bus mapping
-        #_, _, cmapping = min_mapping
-        #assn_ports |= set(cmapping.keys())
+        bus_mappings = []
+        for fcost, bus_def in bus_defs:
+            cost, mapping, match_cost_func = map_ports_to_bus(port_group, bus_def)
+            bus_mappings.append((
+                cost,
+                fcost,
+                mapping,
+                match_cost_func,
+                bus_def,
+            ))
+        bus_mappings.sort(key=lambda x: x[0])
+        lcost = bus_mappings[0][0]
+    
+        pg_bus_mappings.append((
+            lcost,
+            port_group,
+            bus_mappings,
+        ))
+    return list(sorted(pg_bus_mappings, key=lambda x: x[0]))
 
-    return all_bus_mappings
-    #return sorted(all_bus_mappings)
+def debug_bus_mapping(
+    port_group,
+    bus_mapping,
+):
+    (
+        cost,
+        fcost,
+        mapping,
+        match_cost_func,
+        bus_def,
+    ) = bus_mapping
+
+    print(bus_def)
+    print('  - fcost:{}, cost:{}'.format(fcost, cost))
+    print('  - mapped')
+    for (is_opt, cost), pp, bp in sorted(
+        [((bp in set(bus_def.opt_ports), match_cost_func(pp, bp)), pp, bp) \
+            for pp, bp in mapping.items()
+        ],
+        key=lambda x: x[0],
+    ):
+        print('    - cost:{}, {:15s}:{:15s} {}'.format(
+            match_cost_func(pp, bp),
+            str(pp), str(bp),
+            'opt' if is_opt else 'req',
+        ))
+    umap_ports = set(port_group) - set(mapping.keys())
+    umap_busports = set(bus_def.req_ports) - set(mapping.values())
+    print('  - umap phy ports')
+    for port in sorted(umap_ports):
+        print('    - ', port)
+    print('  - umap bus ports')
+    for port in sorted(umap_busports):
+        print('    - ', port)
+    

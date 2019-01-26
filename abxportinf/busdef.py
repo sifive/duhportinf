@@ -140,10 +140,13 @@ class BusDef(object):
         ]
     
     def __str__(self):
-        return 'bus_def{{\n\tbus_type:{},\n\tabstract_type:{},\n\tdriver_type:{}\n}}'.format(
+        return \
+'bus_def{{\n\tbus_type:{},\n\tabstract_type:{},\n\tdriver_type:{},\n\tnum_req:{},\n\tnum_opt:{},\n}}'.format(
             self.bus_type,
             self.abstract_type, 
             self.driver_type,
+            self.num_req_ports,
+            self.num_opt_ports,
         )
     def __init__(
         self,
