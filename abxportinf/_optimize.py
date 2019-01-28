@@ -147,6 +147,8 @@ def map_ports_to_bus(ports, bus_def):
     if swap:
         mapping = {v:k for k, v in mapping.items()}
     cost = mapping_cost(mapping, ports, bus_def)
+    # normalize cost to the number of physical ports matched
+    cost = MatchCost.normalize(cost, len(ports))
     return cost, mapping, match_cost
 
 #--------------------------------------------------------------------------
@@ -160,8 +162,8 @@ def get_cost_funcs(ports, bus_def):
     def match_cost_func(phy_port, bus_port):
         
         def name_dist(w1, w2):
-            return ed.eval(w1, w2)
-            #return ed.eval(w1, w2) / max(len(w1), len(w2))
+            #return ed.eval(w1, w2)
+            return ed.eval(w1, w2) / max(len(w1), len(w2))
     
         # FIXME for now hardcode in functions that are used to get words from name
         # for both ports and buses
@@ -248,10 +250,12 @@ class MatchCost(object):
             self.dc != other.dc
         )
 
-    # cost weights # uniform for now
+    # cost weights
     NAME_W = 1
     WIDTH_W = 1
-    DIR_W = 1
+    # heavily penalize directionality mismatch
+    #DIR_W = 1
+    DIR_W = 4
 
     def __neg__(self, other):
         return MatchCost(
@@ -263,6 +267,20 @@ class MatchCost(object):
     @classmethod
     def zero(cls):
         return cls(0,0,0)
+ 
+    @classmethod
+    def normalize(cls, cost, n):
+        """
+        Normalize the name mismatch cost to the number of wires this cost
+        was computed.  Want to compare the *average* name mismatch rate of
+        a wire, not cumulative.  The width+direction costs should be
+        cumulative by contrast
+        """
+        return cls(
+            cost.nc/n,
+            cost.wc,
+            cost.dc,
+        )
 
     @property
     def value(self):
@@ -278,7 +296,7 @@ class MatchCost(object):
         self.dc = dc
 
     def __str__(self):
-        return '{}(n:{};w:{};d:{})'.format(
+        return '{:2.2f}(n:{:2.2f};w:{};d:{})'.format(
 		    self.value,
             self.nc,
             self.wc,

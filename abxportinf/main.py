@@ -30,13 +30,18 @@ def get_bus_defs(spec_path):
     return BusDef.bus_defs_from_spec(spec_path)
 
 def get_bus_matches(ports, bus_defs):
+    # perform hierarchical clustering over ports to get tree grouping
     pg, Z, wire_names = get_port_grouper(ports)
     
     # pass over all port groups and compute fcost to prioritize potential
     # bus pairings to optimize
+    # NOTE need to keep track of node id in port group tree to pass back
+    # costs and figure out optimal port groupings to expose
     pg_bus_pairings = []
-    for port_group in pg.get_port_groups():
+    for nid, port_group in pg.get_all_port_groups():
         if len(port_group) < 20:
+            continue
+        if len(port_group) > 60:
             continue
         
         # for each port group, only pair the 5 bus defs with the lowest fcost
@@ -44,17 +49,18 @@ def get_bus_matches(ports, bus_defs):
             [(get_mapping_fcost(port_group, bus_def), bus_def) for bus_def in bus_defs],
             key=lambda x:x[0].value,
         ))[:5]
-        pg_bus_pairings.append((port_group, pg_bus_defs))
+        pg_bus_pairings.append((nid, port_group, pg_bus_defs))
+        #break
     
-    # perform bus mappings for chosen subset
+    # perform bus mappings for chosen subset to determine lowest cost bus
+    # mapping for each port group
     pg_bus_mappings = []
+    nid_cost_map = {}
     stime = time.time()
-    for i, (port_group, bus_defs) in enumerate(pg_bus_pairings):
+    for i, (nid, port_group, bus_defs) in enumerate(pg_bus_pairings):
         #print('{}/{}, {}s'.format(i, len(pg_bus_pairings), time.time()-stime))
         #print('  - size port_group', len(port_group))
-        if len(port_group) > 60:
-            #print('    - skipping large')
-            continue
+
         bus_mappings = []
         for fcost, bus_def in bus_defs:
             cost, mapping, match_cost_func = map_ports_to_bus(port_group, bus_def)
@@ -67,13 +73,27 @@ def get_bus_matches(ports, bus_defs):
             ))
         bus_mappings.sort(key=lambda x: x[0])
         lcost = bus_mappings[0][0]
+        nid_cost_map[nid] = lcost
     
         pg_bus_mappings.append((
+            nid,
             lcost,
             port_group,
             bus_mappings,
         ))
-    return list(sorted(pg_bus_mappings, key=lambda x: x[0]))
+
+    # choose optimal port groups to expose to the user
+    print('initial port groups matched', len(pg_bus_mappings))
+    optimal_nids = pg.get_optimal_groups(nid_cost_map)
+    #opt_pg_bus_mappings = list(pg_bus_mappings)
+    opt_pg_bus_mappings = list(sorted(filter(
+        lambda x : x[0] in optimal_nids,
+        pg_bus_mappings,
+    ), key=lambda x: x[1]))
+    print('opt port groups matched', len(opt_pg_bus_mappings))
+
+    # return pairings of <port_group, bus_mapping>
+    return list(map(lambda x: x[2:], opt_pg_bus_mappings))
 
 def debug_bus_mapping(
     port_group,

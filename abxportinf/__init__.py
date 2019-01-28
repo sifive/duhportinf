@@ -8,3 +8,7 @@ from abxportinf._grouper import (
     get_port_grouper,
 )
 
+# FIXME remove
+# make hidden libraries visible for debug
+from abxportinf import _optimize
+
