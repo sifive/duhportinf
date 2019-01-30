@@ -38,10 +38,12 @@ def get_bus_matches(ports, bus_defs):
     # NOTE need to keep track of node id in port group tree to pass back
     # costs and figure out optimal port groupings to expose
     pg_bus_pairings = []
+    nid_cost_map = {}
     for nid, port_group in pg.get_all_port_groups():
+# FIXME with fcost tree p
         if len(port_group) < 20:
             continue
-        if len(port_group) > 60:
+        if len(port_group) > 70:
             continue
         
         # for each port group, only pair the 5 bus defs with the lowest fcost
@@ -49,17 +51,33 @@ def get_bus_matches(ports, bus_defs):
             [(get_mapping_fcost(port_group, bus_def), bus_def) for bus_def in bus_defs],
             key=lambda x:x[0].value,
         ))[:5]
-        pg_bus_pairings.append((nid, port_group, pg_bus_defs))
-        #break
+        l_fcost = pg_bus_defs[0][0]
+        pg_bus_pairings.append((nid, l_fcost, port_group, pg_bus_defs))
+        nid_cost_map[nid] = l_fcost
     
+    # prune port groups in which the lowest fcost is too high to warrant
+    # more expensive bus matching
+    # NOTE don't bother trying to match a particular port group if all the
+    # ports in that group potentially have a better assignment based on
+    # fcost
+    optimal_nids = pg.get_optimal_groups(nid_cost_map)
+    opt_pg_bus_pairings = list(sorted(filter(
+        lambda x : x[0] in optimal_nids,
+        pg_bus_pairings,
+    ), key=lambda x: x[1]))
+
     # perform bus mappings for chosen subset to determine lowest cost bus
     # mapping for each port group
     pg_bus_mappings = []
     nid_cost_map = {}
     stime = time.time()
-    for i, (nid, port_group, bus_defs) in enumerate(pg_bus_pairings):
-        #print('{}/{}, {}s'.format(i, len(pg_bus_pairings), time.time()-stime))
-        #print('  - size port_group', len(port_group))
+    for i, (nid, l_fcost, port_group, bus_defs) in enumerate(opt_pg_bus_pairings):
+        print('pairing: {}, lcost:{}, port group size: {}'.format(
+            i, l_fcost, len(port_group)))
+        print('      ', list(sorted(port_group))[:5])
+
+        if i == 2:
+            break
 
         bus_mappings = []
         for fcost, bus_def in bus_defs:
@@ -83,14 +101,13 @@ def get_bus_matches(ports, bus_defs):
         ))
 
     # choose optimal port groups to expose to the user
-    print('initial port groups matched', len(pg_bus_mappings))
     optimal_nids = pg.get_optimal_groups(nid_cost_map)
-    #opt_pg_bus_mappings = list(pg_bus_mappings)
     opt_pg_bus_mappings = list(sorted(filter(
         lambda x : x[0] in optimal_nids,
         pg_bus_mappings,
     ), key=lambda x: x[1]))
-    print('opt port groups matched', len(opt_pg_bus_mappings))
+    #print('initial port groups matched', len(pg_bus_mappings))
+    #print('opt port groups matched', len(opt_pg_bus_mappings))
 
     # return pairings of <port_group, bus_mapping>
     return list(map(lambda x: x[2:], opt_pg_bus_mappings))

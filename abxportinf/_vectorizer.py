@@ -37,38 +37,78 @@ class Vectorizer(object):
     def size(self): return sum([gv.size for _, gv in self.group_vectorizers.items()])
     @property
     def max_words(self): return self._max_words
+    @property
+    def num_groups(self): return len(self.group_vectorizers)
+    @property
+    def group_sizes(self): 
+        return [
+            gv.size 
+            for k, gv in sorted(
+                self.group_vectorizers.items(),
+                key=lambda x: x[0],
+             )
+        ]
                                
     def __init__(self, wire_names):
         group_words = defaultdict(set)
-        #words = set()
         
         # determine number of word groups based on wire_names
         idx = np.argmax(list(map(
-            lambda x: len(list(util.words_from_name(x, pad=True))),
+            lambda x: len(list(util.words_from_name(x))),
             wire_names,
         )))
         mwire = wire_names[idx]
-        self._max_words = len(list(util.words_from_name(mwire, pad=True)))
+        self._max_words = len(list(util.words_from_name(mwire)))
         
         for wire_name in wire_names:
-            for i, (w1, w2) in self.__iter_groups__(wire_name):
-                for w in w1, w2:
-                    group_words[i].add(w)
-                    #if w != None:
-                    #    words.add(w)
-        self.group_vectorizers = dict([(i, GroupVectorizer(words)) for (i, words) in group_words.items()])
+            for i, words in self.__iter_groups__(wire_name):
+                group_words[i] |= set(words)
+        self.group_vectorizers = dict([
+            (i, GroupVectorizer(words)) 
+            for (i, words) in group_words.items()
+        ])
         
     def __words_from_name__(self, wire_name):
-        base_words = list(util.words_from_name(wire_name, pad=True))
+        base_words = list(util.words_from_name(wire_name))
         slop = self._max_words - len(base_words)
         # can pad with the wire_name itself so wires with smaller 
         # number of words are not biased to cluster with each other
-        #pad = None
-        pad = wire_name
-        return chain(base_words, [pad]*slop)
+        # NOTE this explodes the size of the resulting vectors (since
+        # wire names with a small number of words will be passed through
+        # to the dictionaries of later groups).  this will make
+        # hierarchical clustering extremely slow if not using *euclidean*
+        # metric, for which pairwise computation is fast.  currently using
+        # mahalanobis metric to preferentially prefer prefix matches
+        # NOTE mahalanobis weight matrix is strong enough such that the
+        # bias in similarity between short wire names with different
+        # paddings doesn't affect anything
+        #pad = wire_name
+        pad = None
+        return list(chain(base_words, [pad]*slop))
     
     def __iter_groups__(self, wire_name):
-        return enumerate(pairwise(self.__words_from_name__(wire_name)))
+        # NOTE previously created pairwise groups for *all* words in a wire_name, but
+        # resulting bit vectors were large and increased time to perform
+        # hierarchical clustering
+        #return enumerate(pairwise(self.__words_from_name__(wire_name)))
+        words = self.__words_from_name__(wire_name)
+        gidx = 0
+        fp = 2
+        # yield the first word as a singleton since it should be the
+        # most informative for grouping
+        yield 0, [words[0]]
+        # yield pairs of words for up to the first three words of the wire_name
+        for i, word_pair in enumerate(pairwise(words)):
+            if i == fp:
+                break
+            gidx = i + 1
+            yield gidx, word_pair
+        # then yield singleton words for the rest
+        gidx += 1
+        for word in words[fp+1:]:
+            yield gidx, [word]
+            gidx += 1
+        return
         
     def get_vec(self, wire_name):
         vs = np.hstack(

@@ -1,8 +1,5 @@
 from itertools import chain
 
-def words_from_name(wire, pad=False):
+def words_from_name(wire):
     words = wire.split('_')
-    if pad:
-        return chain([None], words, [None])
-    else:
-        return words
+    return words

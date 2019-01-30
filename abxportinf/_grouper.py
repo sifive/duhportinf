@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.cluster.hierarchy import linkage, to_tree
+from scipy.spatial.distance import pdist
 from ._vectorizer import Vectorizer
 from . import util
 
@@ -8,9 +9,27 @@ def get_port_grouper(ports):
     vectorizer = Vectorizer(wire_names)
     vs = [vectorizer.get_vec(name) for name in wire_names]
     V = np.vstack(vs)
-    Z = linkage(V, 'ward')
+
+    # preferentially weight port name prefix matches using mahalanobis
+    # distance
+    S = np.diag(np.hstack([
+        np.ones(group_size) * scale**4
+        for scale, group_size in zip(
+            range(vectorizer.num_groups, 0,-1),
+            vectorizer.group_sizes,
+        )
+    ]))
+    Y = pdist(
+        V,
+        'mahalanobis',
+        VI=S,
+    )
+    Z = linkage(
+        Y,
+        method='single',
+    )
     pg = PortGrouper(ports, Z)
-    #print(Z[:,:])
+
     return pg, Z, wire_names
 
 class PortGrouper(object):

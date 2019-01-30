@@ -159,6 +159,6 @@ class BusDef(object):
         self.bus_type      = bus_type
         self.abstract_type = abstract_type
         self.driver_type   = driver_type
-        self._req_ports     = req_ports
-        self._opt_ports     = opt_ports
+        self._req_ports    = req_ports
+        self._opt_ports    = opt_ports
 
