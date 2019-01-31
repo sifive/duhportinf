@@ -66,13 +66,20 @@ class PortGrouper(object):
             ),
         ))
 
-    def get_all_port_groups(self):
+    def get_initial_port_groups(self):
         """
-        yield port groups at each non-leaf node of the hierarchical
-        clustering tree.
 
-        modified from ClusterNode src to yield only at non-leaf nodes
+        yield port groups for non-leaf nodes of the hierarchical
+        clustering tree using node distances to intelligently choose
+        initial port groups to expose
+
+        modified from ClusterNode.pre_order() src to yield at non-leaf
+        nodes
         """
+        # first obtain node ids correpsonding to initial port groups to
+        # yield based off of distances in hierarchical clustering tree
+        init_node_ids = self._get_init_node_ids()
+
         # Do a preorder traversal, caching the result. To avoid having to do
         # recursion, we'll store the previous index we've visited in a vector.
         node = self.root_node
@@ -102,10 +109,72 @@ class PortGrouper(object):
                 # node already, go up in the tree.
                 else:
                     k = k - 1
-                    # FIXME remove, just for quick debug
-                    yield nd.id, self._get_group(nd)
+                    if nd.id in init_node_ids:
+                        yield nd.id, self._get_group(nd)
         
         return
+
+    def _get_init_node_ids(self):
+        """
+        use relative distances in linkage tree to determine initial port
+        groups to test.
+
+        yield a particular node, and its port group, if for any port (leaf
+        node) it is the maximum increase in distance.
+        """
+        init_nids = set()
+        def tag_init_node_func(node):
+            curr = node
+            nid_costs = []
+
+            while curr.parent is not None:
+                cost = curr.parent.dist - curr.dist
+                # exclude singletons, which have the largest distance from self
+                if not curr.is_leaf():
+                    nid_costs.append((cost, curr.id, curr))
+                curr = curr.parent
+
+            ## FIXME remove debug
+            #dport = ('axi4_mst0_aclk', 1, 1)
+            #init_group = set(self._get_group(nid_costs[0][-1]))
+            #if dport in init_group and len(init_group) < 60:
+            #    prev_group = set()
+            #    for cost, nid, node in nid_costs:
+            #        group = set(self._get_group(node))
+            #        print('cost:{}, size:{}'.format(cost, len(group)))
+            #        print('  - added', list(sorted(group - prev_group))[:10])
+            #        prev_group = group
+            #    _, opt_nid, opt_node = max(
+            #        filter(
+            #            lambda x: x[-1].get_count() < 200,
+            #            nid_costs,
+            #        ),
+            #        key=lambda x: x[0],
+            #    )
+            #    print('opt size:', len(self._get_group(opt_node)))
+            #    die
+
+            # FIXME for now trim nodes in which the size of the port group
+            # is very large.  this is not really robust, but ports added
+            # closer to the tree root can actually have *very* large costs
+            # and dominate the costs of the nodes that we are actually
+            # trying to capture
+            f_nid_costs = list(filter(
+                    lambda x: x[-1].get_count() < 200,
+                    nid_costs,
+            ))
+            if len(f_nid_costs) > 0:
+                _, opt_nid, opt_node = max(
+                    f_nid_costs,
+                    key=lambda x: x[0],
+                )
+                init_nids.add(opt_nid)
+
+        # use default pre order traversal, which only executes argument
+        # func at the leaves
+        self.root_node.pre_order(tag_init_node_func)
+        
+        return init_nids
 
     def get_optimal_groups(self, nid_cost_map):
 

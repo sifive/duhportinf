@@ -39,13 +39,8 @@ def get_bus_matches(ports, bus_defs):
     # costs and figure out optimal port groupings to expose
     pg_bus_pairings = []
     nid_cost_map = {}
-    for nid, port_group in pg.get_all_port_groups():
-# FIXME with fcost tree p
-        if len(port_group) < 20:
-            continue
-        if len(port_group) > 70:
-            continue
-        
+
+    for nid, port_group in pg.get_initial_port_groups():
         # for each port group, only pair the 5 bus defs with the lowest fcost
         pg_bus_defs = list(sorted(
             [(get_mapping_fcost(port_group, bus_def), bus_def) for bus_def in bus_defs],
@@ -62,9 +57,19 @@ def get_bus_matches(ports, bus_defs):
     # fcost
     optimal_nids = pg.get_optimal_groups(nid_cost_map)
     opt_pg_bus_pairings = list(sorted(filter(
-        lambda x : x[0] in optimal_nids,
+        lambda x : (
+            # must be on an optimal path for some port
+            x[0] in optimal_nids and
+            # must have less than 5 direction mismatches in the best case
+            # from fcost computation
+            x[1].dc < 5 and
+            # minimum 10 ports in a group
+            len(x[2]) > 10
+        ),
         pg_bus_pairings,
     ), key=lambda x: x[1]))
+    #print('initial pg_bus_pairings', len(pg_bus_pairings))
+    #print('opt pg_bus_pairings', len(opt_pg_bus_pairings))
 
     # perform bus mappings for chosen subset to determine lowest cost bus
     # mapping for each port group
@@ -72,13 +77,9 @@ def get_bus_matches(ports, bus_defs):
     nid_cost_map = {}
     stime = time.time()
     for i, (nid, l_fcost, port_group, bus_defs) in enumerate(opt_pg_bus_pairings):
-        print('pairing: {}, lcost:{}, port group size: {}'.format(
-            i, l_fcost, len(port_group)))
-        print('      ', list(sorted(port_group))[:5])
-
-        if i == 2:
-            break
-
+        #print('pairing: {}, lcost:{}, port group size: {}'.format(
+        #    i, l_fcost, len(port_group)))
+        #print('      ', list(sorted(port_group))[:5])
         bus_mappings = []
         for fcost, bus_def in bus_defs:
             cost, mapping, match_cost_func = map_ports_to_bus(port_group, bus_def)
@@ -106,16 +107,39 @@ def get_bus_matches(ports, bus_defs):
         lambda x : x[0] in optimal_nids,
         pg_bus_mappings,
     ), key=lambda x: x[1]))
-    #print('initial port groups matched', len(pg_bus_mappings))
-    #print('opt port groups matched', len(opt_pg_bus_mappings))
 
     # return pairings of <port_group, bus_mapping>
     return list(map(lambda x: x[2:], opt_pg_bus_mappings))
+
+
+def _get_side_band_ports(port_group, bus_mapping):
+    (
+        _,
+        _,
+        mapping,
+        match_cost_func,
+        bus_def,
+    ) = bus_mapping
+    umap_ports = set(port_group) - set(mapping.keys())
+
+    sideband_ports = set()
+    mapping_costs = [match_cost_func(pp, bp) for pp, bp in mapping.items()]
+    med_nc = np.median(list(map(lambda mc: mc.nc, mapping_costs)))
+    # any mapped port which is above the median matched cost is a candidate
+    # sideband signal
+    sideband_mapping = dict(filter(
+        lambda x: match_cost_func(x[0], x[1]).nc > med_nc,
+        mapping.items(),
+    ))
+    sideband_ports = set(sideband_mapping.keys())
+    
+    return sideband_ports
 
 def debug_bus_mapping(
     port_group,
     bus_mapping,
 ):
+    sideband_ports = _get_side_band_ports(port_group, bus_mapping)
     (
         cost,
         fcost,
@@ -124,26 +148,44 @@ def debug_bus_mapping(
         bus_def,
     ) = bus_mapping
 
-    print(bus_def)
-    print('  - fcost:{}, cost:{}'.format(fcost, cost))
-    print('  - mapped')
-    for (is_opt, cost), pp, bp in sorted(
-        [((bp in set(bus_def.opt_ports), match_cost_func(pp, bp)), pp, bp) \
+    debug_str = ''
+    debug_str += str(bus_def)+'\n'
+    debug_str += ('  - fcost:{}, cost:{}'.format(fcost, cost))+'\n'
+    debug_str += ('  - mapped')+'\n'
+    # display mapped signals in order of best match, staring with required
+    # signals
+    for (is_opt, is_sideband, cost), pp, bp in sorted(
+        [
+            (
+                (
+                    bp in set(bus_def.opt_ports), 
+                    pp in sideband_ports,
+                    match_cost_func(pp, bp),
+                ), 
+                pp, 
+                bp,
+            ) 
             for pp, bp in mapping.items()
         ],
         key=lambda x: x[0],
     ):
-        print('    - cost:{}, {:15s}:{:15s} {}'.format(
+        debug_str += ('    - {} cost:{}, {:15s}:{:15s} {}'.format(
+            '*sideband cand*' if is_sideband else '',
             match_cost_func(pp, bp),
             str(pp), str(bp),
             'opt' if is_opt else 'req',
-        ))
+        ))+'\n'
     umap_ports = set(port_group) - set(mapping.keys())
     umap_busports = set(bus_def.req_ports) - set(mapping.values())
-    print('  - umap phy ports')
-    for port in sorted(umap_ports):
-        print('    - ', port)
-    print('  - umap bus ports')
-    for port in sorted(umap_busports):
-        print('    - ', port)
+    if len(umap_ports) > 0:
+        debug_str += ('  - umap phy ports')+'\n'
+        for port in sorted(umap_ports):
+            debug_str += ('    - {}'.format(port))+'\n'
+    if len(umap_busports) > 0:
+        debug_str += ('  - umap bus ports')+'\n'
+        for port in sorted(umap_busports):
+            debug_str += ('    - {}'.format(port))+'\n'
+
+    #print(debug_str)
+    return debug_str
     

@@ -176,8 +176,8 @@ def get_cost_funcs(ports, bus_def):
         return MatchCost(
             # name attr mismatch
             cost_n,
-            # width mismatch
-            (phy_port[1] != bus_port[1]),
+            # width mismatch (both being None does *not* count as a match)
+            (phy_port[1] != bus_port[1]) or phy_port[1] == None,
             # direction mismatch
             (phy_port[2] != bus_port[2]),
         )
