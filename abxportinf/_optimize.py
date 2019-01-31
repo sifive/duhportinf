@@ -94,7 +94,7 @@ def map_ports_to_bus(ports, bus_def):
     """
     # get cost functions from closure, which takes into account specifics of
     # bus_def
-    match_cost, mapping_cost = get_cost_funcs(ports, bus_def)
+    match_cost_func, mapping_cost_func = get_cost_funcs(ports, bus_def)
 
     ports1 = list(ports)
     ports2 = list(bus_def.req_ports)
@@ -104,7 +104,7 @@ def map_ports_to_bus(ports, bus_def):
     C = np.zeros((m, n))
     for i, p1 in enumerate(ports1):
         for j, p2 in enumerate(ports2):
-            C[i,j] = match_cost(p1, p2).value
+            C[i,j] = match_cost_func(p1, p2).value
 
     # swap phy ports with bus def so that the columns are always the ones
     # underdetermined
@@ -135,7 +135,7 @@ def map_ports_to_bus(ports, bus_def):
             cvx_sum([x[jj] for jj in range(j, m*n, n)]) <= 1
         )
 
-    # NOTE mus use external solver (such as glpk), the default one is
+    # NOTE must use external solver (such as glpk), the default one is
     # _very_ slow
     op(
         dot(c, x),
@@ -146,10 +146,16 @@ def map_ports_to_bus(ports, bus_def):
     mapping = {ports1[i] : ports2[j] for i, j in np.argwhere(X)}
     if swap:
         mapping = {v:k for k, v in mapping.items()}
-    cost = mapping_cost(mapping, ports, bus_def)
+    sideband_ports = get_side_band_ports(
+        mapping, 
+        ports,
+        bus_def,
+        match_cost_func,
+    )
+    cost = mapping_cost_func(mapping, ports, sideband_ports, bus_def)
     # normalize cost to the number of physical ports matched
     cost = MatchCost.normalize(cost, len(ports))
-    return cost, mapping, match_cost
+    return cost, mapping, sideband_ports, match_cost_func
 
 #--------------------------------------------------------------------------
 # helpers for computing cost function
@@ -184,17 +190,41 @@ def get_cost_funcs(ports, bus_def):
     
     # NOTE this function closure actually includes the match_cost_func defined
     # above
-    def mapping_cost_func(mapping, ports, bus_def):
+    def mapping_cost_func(mapping, ports, sideband_ports, bus_def):
         umap_ports = set(ports) - set(mapping.keys())
         umap_busports = set(bus_def.req_ports) - set(mapping.values())
         cost = MatchCost.zero()
-        cost += sum([match_cost_func(p1, p2) for p1, p2 in mapping.items()])
+        # add penalties for all mapped signals *except* sidebands, which will be
+        # penalized as unmapped
+        cost += sum([
+            match_cost_func(p1, p2)
+            for p1, p2 in mapping.items()
+                if p1 not in sideband_ports
+        ])
         # penalize only width+direction for unmapped ports
         cost += MatchCost(0,1,1)*len(umap_ports)
         cost += MatchCost(0,1,1)*len(umap_busports)
+        # penalize sideband candidates as unmapped
+        cost += MatchCost(0,1,1)*len(sideband_ports)
         return cost
 
     return match_cost_func, mapping_cost_func
+
+def get_side_band_ports(mapping, ports, bus_def, match_cost_func):
+    umap_ports = set(ports) - set(mapping.keys())
+
+    sideband_ports = set()
+    mapping_costs = [match_cost_func(pp, bp) for pp, bp in mapping.items()]
+    med_nc = np.median(list(map(lambda mc: mc.nc, mapping_costs)))
+    # any mapped port which has a name cost above the median matched name
+    # cost is a candidate sideband signal
+    sideband_mapping = dict(filter(
+        lambda x: match_cost_func(x[0], x[1]).nc > med_nc,
+        mapping.items(),
+    ))
+    sideband_ports = set(sideband_mapping.keys())
+    
+    return sideband_ports
 
 
 def MAKE_BINARY(opfn):

@@ -82,11 +82,13 @@ def get_bus_matches(ports, bus_defs):
         #print('      ', list(sorted(port_group))[:5])
         bus_mappings = []
         for fcost, bus_def in bus_defs:
-            cost, mapping, match_cost_func = map_ports_to_bus(port_group, bus_def)
+            cost, mapping, sideband_ports, match_cost_func = \
+                map_ports_to_bus(port_group, bus_def)
             bus_mappings.append((
                 cost,
                 fcost,
                 mapping,
+                sideband_ports,
                 match_cost_func,
                 bus_def,
             ))
@@ -111,46 +113,22 @@ def get_bus_matches(ports, bus_defs):
     # return pairings of <port_group, bus_mapping>
     return list(map(lambda x: x[2:], opt_pg_bus_mappings))
 
-
-def _get_side_band_ports(port_group, bus_mapping):
-    (
-        _,
-        _,
-        mapping,
-        match_cost_func,
-        bus_def,
-    ) = bus_mapping
-    umap_ports = set(port_group) - set(mapping.keys())
-
-    sideband_ports = set()
-    mapping_costs = [match_cost_func(pp, bp) for pp, bp in mapping.items()]
-    med_nc = np.median(list(map(lambda mc: mc.nc, mapping_costs)))
-    # any mapped port which is above the median matched cost is a candidate
-    # sideband signal
-    sideband_mapping = dict(filter(
-        lambda x: match_cost_func(x[0], x[1]).nc > med_nc,
-        mapping.items(),
-    ))
-    sideband_ports = set(sideband_mapping.keys())
-    
-    return sideband_ports
-
 def debug_bus_mapping(
     port_group,
     bus_mapping,
 ):
-    sideband_ports = _get_side_band_ports(port_group, bus_mapping)
     (
         cost,
         fcost,
         mapping,
+        sideband_ports,
         match_cost_func,
         bus_def,
     ) = bus_mapping
 
     debug_str = ''
     debug_str += str(bus_def)+'\n'
-    debug_str += ('  - fcost:{}, cost:{}'.format(fcost, cost))+'\n'
+    debug_str += ('  - cost:{}, fcost:{}'.format(cost, fcost))+'\n'
     debug_str += ('  - mapped')+'\n'
     # display mapped signals in order of best match, staring with required
     # signals

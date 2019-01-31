@@ -11,7 +11,8 @@ def get_port_grouper(ports):
     V = np.vstack(vs)
 
     # preferentially weight port name prefix matches using mahalanobis
-    # distance
+    # distance.  specify matrix S so that mismatches in the prefix word
+    # groups will be more heavily penalized
     S = np.diag(np.hstack([
         np.ones(group_size) * scale**4
         for scale, group_size in zip(
@@ -33,11 +34,9 @@ def get_port_grouper(ports):
     return pg, Z, wire_names
 
 class PortGrouper(object):
-
     """
     Build a tree off an input hierarchical clustering linkage matrix Z.
-    Yield all groupings of the input ports by traversing this tree in
-    pre-order.
+    Use the tree to yield port groups.
     """
 
     def __init__(self, ports, Z):
@@ -68,12 +67,11 @@ class PortGrouper(object):
 
     def get_initial_port_groups(self):
         """
-
-        yield port groups for non-leaf nodes of the hierarchical
+        Yield port groups for non-leaf nodes of the hierarchical
         clustering tree using node distances to intelligently choose
         initial port groups to expose
 
-        modified from ClusterNode.pre_order() src to yield at non-leaf
+        Modified from ClusterNode.pre_order() src to yield at non-leaf
         nodes
         """
         # first obtain node ids correpsonding to initial port groups to
@@ -116,10 +114,10 @@ class PortGrouper(object):
 
     def _get_init_node_ids(self):
         """
-        use relative distances in linkage tree to determine initial port
+        Use relative distances in linkage tree to determine initial port
         groups to test.
 
-        yield a particular node, and its port group, if for any port (leaf
+        Yield a particular node, and its port group, if for any port (leaf
         node) it is the maximum increase in distance.
         """
         init_nids = set()
