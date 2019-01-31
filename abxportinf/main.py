@@ -63,8 +63,8 @@ def get_bus_matches(ports, bus_defs):
             # must have less than 5 direction mismatches in the best case
             # from fcost computation
             x[1].dc < 5 and
-            # minimum 10 ports in a group
-            len(x[2]) > 10
+            # at least 4 ports in a group
+            len(x[2]) > 3
         ),
         pg_bus_pairings,
     ), key=lambda x: x[1]))

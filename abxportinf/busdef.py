@@ -84,11 +84,12 @@ class BusDef(object):
     @classmethod
     def parse_port(cls, portname, portdef):
         assert set([
-            'logicalName',
+            # NOTE was only required for IP-XACT, will be removed for
+            # component.json5
+            #'logicalName',
             'wire',
         ]).issubset(set(portdef.keys())), \
             "required keys missing in description of port {}".format(portname)
-        logical_name = portdef['logicalName']
         req_port_map = defaultdict(lambda: None)
         opt_port_map = defaultdict(lambda: None)
         for type_key in ['onMaster', 'onSlave']:
@@ -97,7 +98,7 @@ class BusDef(object):
             subportdef = portdef['wire'][type_key]
             assert (
                 set([
-                    'presence',
+                    #'presence',
                     'direction',
                     #'width',
                 ]).issubset(set(subportdef.keys())) 
@@ -105,18 +106,25 @@ class BusDef(object):
                 ('presence' in subportdef and subportdef['presence'] == 'illegal')
             ), \
                 "required keys missing in {} description of port {}".format(
-                    type_key, logical_name,
+                    type_key, portname,
                 )
-            assert subportdef['presence'] in ['required', 'optional', 'illegal']
-            # FIXME handle illegal separately
-            if subportdef['presence'] == 'illegal':
-                continue
+            if 'presence' in subportdef:
+                assert subportdef['presence'] in ['required', 'optional', 'illegal']
+                # FIXME handle illegal separately
+                if subportdef['presence'] == 'illegal':
+                    continue
                 
-            width = None if 'width' not in subportdef else int(subportdef['width'])
+            width = None 
+            if 'width' in subportdef and type(subportdef['width']) == int:
+                width = subportdef['width']
             #direction = np.sign(-1) if subportdef['direction'] == 'in' else np.sign(1)
             direction = np.sign(1) if subportdef['direction'] == 'in' else np.sign(-1)
-            desc = (logical_name, width, direction)
-            if subportdef['presence'] == 'required':
+            desc = (portname, width, direction)
+            # FIXME memory spec does not include 'presence' attr at the
+            # moment
+            if 'presence' not in subportdef:
+                req_port_map[type_key] = desc
+            elif subportdef['presence'] == 'required':
                 req_port_map[type_key] = desc
             else:
                 opt_port_map[type_key] = desc
