@@ -3,8 +3,14 @@ from _ctypes import PyObj_FromPtr
 import json
 import re
 
-def words_from_name(wire):
-    words = wire.split('_')
+def words_from_name(name):
+    # convert camelcase to '_'
+    name = re.sub('(.)([A-Z][a-z]+)(.)', r'\1_\2\3', name)
+    # always return lower case so case insensitive
+    name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
+    ## insert '_' in between names and numbers
+    #name = re.sub('([a-zA-Z])([0-9])', r'\1_\2', name).lower()
+    words = name.split('_')
     return words
 
 def progress_bar(

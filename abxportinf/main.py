@@ -9,9 +9,6 @@ from ._grouper import get_port_grouper
 from . import busdef
 from . import util
 
-# FIXME remove
-import time
-
 def get_ports_from_json5(comp_json5_path):
     with open(comp_json5_path) as fin:
         block = json5.load(fin)
@@ -103,7 +100,6 @@ def get_bus_matches(ports, bus_defs):
     # mapping for each port group
     pg_bus_mappings = []
     nid_cost_map = {}
-    stime = time.time()
     print('bus mapping')
     ptot = sum([len(bd) for _, _, _, bd in opt_pg_bus_pairings])
     plen = min(ptot, 50)

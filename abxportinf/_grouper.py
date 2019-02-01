@@ -133,6 +133,7 @@ class PortGrouper(object):
                 curr = curr.parent
 
             ## FIXME remove debug
+            #dport = ('axi0_AWLEN', 8, 1)
             #dport = ('axi4_mst0_aclk', 1, 1)
             #init_group = set(self._get_group(nid_costs[0][-1]))
             #if dport in init_group and len(init_group) < 60:

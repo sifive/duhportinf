@@ -169,13 +169,11 @@ def get_cost_funcs(ports, bus_def):
     def match_cost_func(phy_port, bus_port):
         
         def name_dist(w1, w2):
-            #return ed.eval(w1, w2)
-            return ed.eval(w1, w2) / max(len(w1), len(w2))
+            return ed.eval(w1, w2)
+            #return ed.eval(w1, w2) / max(len(w1), len(w2))
     
-        # FIXME for now hardcode in functions that are used to get words from name
-        # for both ports and buses
-        p_words = util.words_from_name(phy_port[0].lower())
-        b_words = bus_def.words_from_name(bus_port[0].lower())
+        p_words = util.words_from_name(phy_port[0])
+        b_words = bus_def.words_from_name(bus_port[0])
         cost_n = 0
         for b_word in b_words:
             cost_n += min(map(lambda w: name_dist(b_word, w), p_words))

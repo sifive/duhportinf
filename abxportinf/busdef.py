@@ -1,6 +1,7 @@
 import numpy as np
 import json5
 from collections import defaultdict
+from . import util
 
 class dotdict(dict):
     """
@@ -141,11 +142,15 @@ class BusDef(object):
     def opt_ports(self): return list(self._opt_ports)
     
     def words_from_name(self, port_name):
-        return [
-            self.bus_type.name, 
+        attrs = [
+            # FIXME there's a subtlety as to why this does not work well
+            # need to figure thit out
+            #self.bus_type.name, 
             #self.bus_type.library, 
             port_name,
         ]
+        # split each attribute
+        return [sw.lower() for w in attrs for sw in util.words_from_name(w)]
     
     def __str__(self):
         return \
