@@ -95,6 +95,7 @@ def get_bus_matches(ports, bus_defs):
         ),
         pg_bus_pairings,
     ), key=lambda x: x[1]))
+    print('  - done')
     #print('initial pg_bus_pairings', len(pg_bus_pairings))
     #print('opt pg_bus_pairings', len(opt_pg_bus_pairings))
 
