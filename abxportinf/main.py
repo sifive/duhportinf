@@ -1,10 +1,13 @@
 import os
+import sys
 import numpy as np
 import json5
+import argparse
 from .busdef import BusDef
 from ._optimize import map_ports_to_bus, get_mapping_fcost
 from ._grouper import get_port_grouper
 from . import busdef
+from . import util
 
 # FIXME remove
 import time
@@ -17,7 +20,7 @@ def get_ports_from_json5(comp_json5_path):
         try:
             w, d = np.abs(pw), np.sign(pw)
         except Exception as e:
-            print('Warning', (name, pw), 'not correctly parsed')
+            #print('Warning', (name, pw), 'not correctly parsed')
             w, d = None, np.sign(-1) if pw[0] == '-' else np.sign(1)
         ports.append( (name, w, d) )
     return ports
@@ -29,9 +32,32 @@ def get_bus_defs(spec_path):
     
     return BusDef.bus_defs_from_spec(spec_path)
 
+def load_bus_defs(rootdir):
+    spec_paths = []
+    for root, dirs, fnames in os.walk(rootdir):
+        for fname in fnames:             
+            spec_path = os.path.join(root, fname)
+            if BusDef.is_spec_bus_def(spec_path):     
+                spec_paths.append(spec_path)
+
+    bus_defs = []                
+    print('loading {} bus specs'.format(len(spec_paths)))
+    for spec_path in spec_paths:
+        #print('  - loading ', spec_path)
+        bus_defs.extend(BusDef.bus_defs_from_spec(spec_path))                
+
+    print('  - done, loaded {} bus defs with {} required and {} optional ports '.format(
+        len(bus_defs),
+        sum([bd.num_req_ports for bd in bus_defs]),
+        sum([bd.num_opt_ports for bd in bus_defs]),
+    ))
+    return bus_defs
+
 def get_bus_matches(ports, bus_defs):
     # perform hierarchical clustering over ports to get tree grouping
+    print('hierarchically clustering ports and selecting port groups')
     pg, Z, wire_names = get_port_grouper(ports)
+    print('  - done')
     
     # pass over all port groups and compute fcost to prioritize potential
     # bus pairings to optimize
@@ -40,6 +66,7 @@ def get_bus_matches(ports, bus_defs):
     pg_bus_pairings = []
     nid_cost_map = {}
 
+    print('initial bus pairing with port groups')
     for nid, port_group in pg.get_initial_port_groups():
         # for each port group, only pair the 5 bus defs with the lowest fcost
         pg_bus_defs = list(sorted(
@@ -76,6 +103,11 @@ def get_bus_matches(ports, bus_defs):
     pg_bus_mappings = []
     nid_cost_map = {}
     stime = time.time()
+    print('bus mapping')
+    ptot = sum([len(bd) for _, _, _, bd in opt_pg_bus_pairings])
+    plen = min(ptot, 50)
+    pcurr = 0
+    util.progress_bar(pcurr, ptot, length=plen)
     for i, (nid, l_fcost, port_group, bus_defs) in enumerate(opt_pg_bus_pairings):
         #print('pairing: {}, lcost:{}, port group size: {}'.format(
         #    i, l_fcost, len(port_group)))
@@ -92,6 +124,9 @@ def get_bus_matches(ports, bus_defs):
                 match_cost_func,
                 bus_def,
             ))
+            util.progress_bar(pcurr+1, ptot, length=plen)
+            pcurr += 1
+
         bus_mappings.sort(key=lambda x: x[0])
         lcost = bus_mappings[0][0]
         nid_cost_map[nid] = lcost
@@ -113,57 +148,44 @@ def get_bus_matches(ports, bus_defs):
     # return pairings of <port_group, bus_mapping>
     return list(map(lambda x: x[2:], opt_pg_bus_mappings))
 
-def debug_bus_mapping(
-    port_group,
-    bus_mapping,
-):
-    (
-        cost,
-        fcost,
-        mapping,
-        sideband_ports,
-        match_cost_func,
-        bus_def,
-    ) = bus_mapping
+#--------------------------------------------------------------------------
+# main
+#--------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-b', '--duh-bus',
+        default=None,
+        required=True,
+        help='duh-bus root direcotry that contains bus specifications',
+    )
+    parser.add_argument(
+        '-o', '--output',
+        default=sys.stdout,
+        required=False,
+        help='output path to busprop.json with proposed bus mappings for select groups of ports',
+    )
+    parser.add_argument(
+        'component_json5',
+        help='input component.json5 with port list of top-level module',
+    
+    )
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+    args = parser.parse_args()
 
-    debug_str = ''
-    debug_str += str(bus_def)+'\n'
-    debug_str += ('  - cost:{}, fcost:{}'.format(cost, fcost))+'\n'
-    debug_str += ('  - mapped')+'\n'
-    # display mapped signals in order of best match, staring with required
-    # signals
-    for (is_opt, is_sideband, cost), pp, bp in sorted(
-        [
-            (
-                (
-                    bp in set(bus_def.opt_ports), 
-                    pp in sideband_ports,
-                    match_cost_func(pp, bp),
-                ), 
-                pp, 
-                bp,
-            ) 
-            for pp, bp in mapping.items()
-        ],
-        key=lambda x: x[0],
-    ):
-        debug_str += ('    - {} cost:{}, {:15s}:{:15s} {}'.format(
-            '*sideband cand*' if is_sideband else '',
-            match_cost_func(pp, bp),
-            str(pp), str(bp),
-            'opt' if is_opt else 'req',
-        ))+'\n'
-    umap_ports = set(port_group) - set(mapping.keys())
-    umap_busports = set(bus_def.req_ports) - set(mapping.values())
-    if len(umap_ports) > 0:
-        debug_str += ('  - umap phy ports')+'\n'
-        for port in sorted(umap_ports):
-            debug_str += ('    - {}'.format(port))+'\n'
-    if len(umap_busports) > 0:
-        debug_str += ('  - umap bus ports')+'\n'
-        for port in sorted(umap_busports):
-            debug_str += ('    - {}'.format(port))+'\n'
+    assert os.path.isdir(args.duh_bus), '{} not a directory'.format(args.duh_bus)
+    assert os.path.isfile(args.component_json5), '{} does not exist'.format(args.component_json5)
+    if args.output != sys.stdout and os.path.dirname(args.output) != '':
+        dn = os.path.dirname(args.output)
+        assert os.path.isdir(dn), 'output directory {} does not exist'.format(dn)
 
-    #print(debug_str)
-    return debug_str
+    all_ports = get_ports_from_json5(args.component_json5)
+    bus_defs = load_bus_defs(args.duh_bus)
+    pg_bus_mappings = get_bus_matches(all_ports, bus_defs)
+    util.dump_json_bus_candidates(args.output, pg_bus_mappings)
+
+if __name__ == '__main__':
+    main()
     

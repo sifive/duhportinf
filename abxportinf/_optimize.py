@@ -10,6 +10,7 @@ from . import util
 from .busdef import BusDef
 
 solvers.options['show_progress'] = False
+solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
 def get_mapping_fcost(ports, bus_def):
     """

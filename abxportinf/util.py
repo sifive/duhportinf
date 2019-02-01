@@ -7,10 +7,40 @@ def words_from_name(wire):
     words = wire.split('_')
     return words
 
+def progress_bar(
+    iteration,
+    total,
+    prefix = 'Progress:',
+    suffix = 'Complete',
+    decimals = 1,
+    length = 100,
+    fill = 'x',
+ ): 
+    """
+    referenced from: https://stackoverflow.com/questions/3173320/
+
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    s = '\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix)
+    print(s, end = '\r')
+    # erase bar and print complete
+    if iteration == total: 
+        print('\r', ' '*len(s), '\r', '  - done')
+
 #--------------------------------------------------------------------------
 # json handling
 #--------------------------------------------------------------------------
-
 class NoIndent(object):
     """ Value wrapper. """
     def __init__(self, value):
@@ -56,7 +86,7 @@ class PrettyPrintEncoder(json.JSONEncoder):
 
         return json_repr
 
-def dump_json_bus_candidates(json_path, pg_bus_mappings):
+def dump_json_bus_candidates(output, pg_bus_mappings):
 
     def json_format(p):
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
@@ -131,7 +161,11 @@ def dump_json_bus_candidates(json_path, pg_bus_mappings):
         'port_groups' : portgroup_objs,
         'port_maps' : portmap_objs,
     }
-    with open(json_path, 'w') as fout:
-        s = json.dumps(o, indent=4, cls=PrettyPrintEncoder)
-        fout.write(s)
+    s = json.dumps(o, indent=4, cls=PrettyPrintEncoder)
+    if hasattr(output, 'write'):
+        _ = output.write(s)
+    else:
+        with open(output, 'w') as fout:
+            fout.write(s)
+    return
 

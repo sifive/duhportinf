@@ -170,3 +170,60 @@ class BusDef(object):
         self._req_ports    = req_ports
         self._opt_ports    = opt_ports
 
+#--------------------------------------------------------------------------
+# debug
+#--------------------------------------------------------------------------
+def debug_bus_mapping(
+    port_group,
+    bus_mapping,
+):
+    (
+        cost,
+        fcost,
+        mapping,
+        sideband_ports,
+        match_cost_func,
+        bus_def,
+    ) = bus_mapping
+
+    debug_str = ''
+    debug_str += str(bus_def)+'\n'
+    debug_str += ('  - cost:{}, fcost:{}'.format(cost, fcost))+'\n'
+    debug_str += ('  - mapped')+'\n'
+    # display mapped signals in order of best match, staring with required
+    # signals
+    for (is_opt, is_sideband, cost), pp, bp in sorted(
+        [
+            (
+                (
+                    bp in set(bus_def.opt_ports), 
+                    pp in sideband_ports,
+                    match_cost_func(pp, bp),
+                ), 
+                pp, 
+                bp,
+            ) 
+            for pp, bp in mapping.items()
+        ],
+        key=lambda x: x[0],
+    ):
+        debug_str += ('    - {} cost:{}, {:15s}:{:15s} {}'.format(
+            '*sideband cand*' if is_sideband else '',
+            match_cost_func(pp, bp),
+            str(pp), str(bp),
+            'opt' if is_opt else 'req',
+        ))+'\n'
+    umap_ports = set(port_group) - set(mapping.keys())
+    umap_busports = set(bus_def.req_ports) - set(mapping.values())
+    if len(umap_ports) > 0:
+        debug_str += ('  - umap phy ports')+'\n'
+        for port in sorted(umap_ports):
+            debug_str += ('    - {}'.format(port))+'\n'
+    if len(umap_busports) > 0:
+        debug_str += ('  - umap bus ports')+'\n'
+        for port in sorted(umap_busports):
+            debug_str += ('    - {}'.format(port))+'\n'
+
+    #print(debug_str)
+    return debug_str
+
