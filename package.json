@@ -1,0 +1,27 @@
+{
+  "name": "duhportinf",
+  "version": "0.1.0",
+  "description": "library to match flat named port list to library of bus specifications",
+  "scripts": {
+    "gen-reqs": ".npm-install/gen-local-req.py requirements.txt local-pylib-requirements.txt",
+    "install-pyreqs": "pip install --target $PWD/pylib -r local-pylib-requirements.txt",
+    "install": "npm run -s gen-reqs && npm run -s install-pyreqs && pip install --target $PWD/pylib ."
+  },
+  "bin": {
+    "duh-portinf": ".npm-install/duhportinf-bin.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sifive/duhportinf.git"
+  },
+  "keywords": [
+    "duh",
+    "inference"
+  ],
+  "author": "alex bishara",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sifive/duhportinf/issues"
+  },
+  "homepage": "https://github.com/sifive/duhportinf#readme"
+}

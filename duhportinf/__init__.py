@@ -1,13 +1,13 @@
-from abxportinf.main import (
+from duhportinf.main import (
     get_ports_from_json5,
     get_bus_defs,
     get_bus_matches,
     load_bus_defs,
 )
-from abxportinf._grouper import (
+from duhportinf._grouper import (
     get_port_grouper,
 )
-from abxportinf.busdef import (
+from duhportinf.busdef import (
     debug_bus_mapping,
 )
 
