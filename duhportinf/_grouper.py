@@ -133,8 +133,9 @@ class PortGrouper(object):
                 curr = curr.parent
 
             ## FIXME remove debug
-            #dport = ('axi0_AWLEN', 8, 1)
-            #dport = ('axi4_mst0_aclk', 1, 1)
+            ##dport = ('axi0_AWLEN', 8, 1)
+            ##dport = ('axi4_mst0_aclk', 1, 1)
+            #dport = ('nvdla_core2dbb_aw_awready', 1, 1)
             #init_group = set(self._get_group(nid_costs[0][-1]))
             #if dport in init_group and len(init_group) < 60:
             #    prev_group = set()
@@ -143,14 +144,19 @@ class PortGrouper(object):
             #        print('cost:{}, size:{}'.format(cost, len(group)))
             #        print('  - added', list(sorted(group - prev_group))[:10])
             #        prev_group = group
-            #    _, opt_nid, opt_node = max(
-            #        filter(
-            #            lambda x: x[-1].get_count() < 200,
-            #            nid_costs,
-            #        ),
-            #        key=lambda x: x[0],
-            #    )
-            #    print('opt size:', len(self._get_group(opt_node)))
+            #    f_nid_costs = list(filter(
+            #        lambda x: x[-1].get_count() < 200,
+            #        nid_costs,
+            #    ))
+            #    if len(f_nid_costs) > 0:
+            #        opt_nid_costs = sorted(
+            #            f_nid_costs,
+            #            key=lambda x: x[0],
+            #            reverse=True,
+            #        )[:2]
+            #        for opt in opt_nid_costs:
+            #            print('opt size:', opt[-1].get_count())
+            #        die
             #    die
 
             # FIXME for now trim nodes in which the size of the port group
@@ -159,15 +165,17 @@ class PortGrouper(object):
             # and dominate the costs of the nodes that we are actually
             # trying to capture
             f_nid_costs = list(filter(
-                    lambda x: x[-1].get_count() < 200,
-                    nid_costs,
+                lambda x: x[-1].get_count() < 200,
+                nid_costs,
             ))
             if len(f_nid_costs) > 0:
-                _, opt_nid, opt_node = max(
+                opt_nid_costs = sorted(
                     f_nid_costs,
                     key=lambda x: x[0],
-                )
-                init_nids.add(opt_nid)
+                    reverse=True,
+                )[:2]
+                for _, opt_nid, _ in opt_nid_costs:
+                    init_nids.add(opt_nid)
 
         # use default pre order traversal, which only executes argument
         # func at the leaves
