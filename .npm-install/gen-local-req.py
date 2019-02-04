@@ -10,7 +10,7 @@ def libv(s):
     s = str(s)
     return s.split('==') if '==' in s else s.split('>=')
 
-txt = subprocess.check_output(['pip', 'list', '--format=freeze'])
+txt = subprocess.check_output(['pip3', 'list', '--format=freeze'])
 txt = txt.decode('ascii', 'ignore')
 installed = {}
 for line in txt.split():
