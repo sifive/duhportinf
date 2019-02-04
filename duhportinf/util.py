@@ -146,7 +146,7 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
             sideband_names =   [NoIndent((bp[0], pp[0])) for pp, bp in mapped_sideband_ports]
             # propose all unmapped names as user signals as well, but without a logical mapping
             umap_ports = list(set(port_group) - set(mapping.keys()))
-            sideband_names.extend([NoIndent((pp[0], None)) for pp in umap_ports])
+            sideband_names.extend([NoIndent((None, pp[0])) for pp in umap_ports])
             pm_o = {
                 'req_mapped': req_mapped_names,
                 'opt_mapped': opt_mapped_names,
