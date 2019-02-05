@@ -163,10 +163,10 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
         }
         portgroup_objs.append(pgo)
         
-    o = {
-        'port_groups' : portgroup_objs,
-        'port_maps' : portmap_objs,
-    }
+    o = [
+        ('port_groups' , portgroup_objs),
+        ('port_maps' , portmap_objs),
+    ]
     s = json.dumps(o, indent=4, cls=PrettyPrintEncoder)
     if hasattr(output, 'write'):
         _ = output.write(s)
