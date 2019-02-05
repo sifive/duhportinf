@@ -15,14 +15,16 @@ txt = txt.decode('ascii', 'ignore')
 installed = {}
 for line in txt.split():
     lib, v = libv(line)
-    installed[lib] = version(v)
+    #installed[lib] = version(v)
+    installed[lib] = True
 with open(inreq_path) as fin, \
      open(outreq_path, 'w') as fout:
     for line in fin:
         rlib, rv = libv(line)
         if (
             rlib not in installed or
-            version(rv) > installed[rlib]
+            False
+            #version(rv) > installed[rlib]
         ):
             fout.write(line)
 
