@@ -147,20 +147,20 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
             # propose all unmapped names as user signals as well, but without a logical mapping
             umap_ports = list(set(port_group) - set(mapping.keys()))
             sideband_names.extend([NoIndent((None, pp[0])) for pp in umap_ports])
-            pm_o = {
-                'req_mapped': req_mapped_names,
-                'opt_mapped': opt_mapped_names,
-                'user_sideband': sideband_names,
-                'unmapped': [],
-            }
+            pm_o = [
+                ('req_mapped', req_mapped_names),
+                ('opt_mapped', opt_mapped_names),
+                ('user_sideband', sideband_names),
+                ('unmapped', []),
+            ]
             bus_mapping_objs.append(o)
             portmap_objs.append((portmap_name, pm_o))
         
-        pgo = {
-            'port_group_num': i,
-            'ports': [NoIndent(json_format(p)) for p in sorted(port_group)],
-            'busInterfaces': bus_mapping_objs,
-        }
+        pgo = [
+            ('port_group_num', i),
+            ('ports', [NoIndent(json_format(p)) for p in sorted(port_group)]),
+            ('busInterfaces', bus_mapping_objs),
+        ]
         portgroup_objs.append(pgo)
         
     o = [
