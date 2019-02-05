@@ -185,8 +185,7 @@ class PortGrouper(object):
 
     def get_optimal_groups(self, nid_cost_map):
 
-        opt_nids = set()
-        def tag_optimal_func(node):
+        def count_optimal_func(node):
             curr = node
             nid_costs = []
 
@@ -195,9 +194,6 @@ class PortGrouper(object):
                     nid_cost_map[curr.id]
                 if cost is not None:
                     nid_costs.append((cost, curr.id, curr))
-                # early exit
-                if curr.optimal:
-                    break
                 curr = curr.parent
 
             ## must be at least one node assigned a cost on the path of
@@ -205,12 +201,21 @@ class PortGrouper(object):
             #assert len(nid_costs) > 0
             if len(nid_costs) > 0:
                 _, opt_nid, opt_node = min(nid_costs, key=lambda x: x[0])
-                opt_nids.add(opt_nid)
-                opt_node.optimal = True
+                opt_node.optimal += 1
+
+
+        opt_nids = set()
+        def tag_optimal_func(node):
+            if node.optimal > 3:
+                opt_nids.add(node.id)
 
         # use default pre order traversal, which only executes argument
         # func at the leaves
-        self.root_node.pre_order(tag_optimal_func)
+        self.root_node.pre_order(count_optimal_func)
+
+        # use helper  pre order traversal to tag non-leaf nodes that have
+        # a high optimal count
+        pre_order_n(self.root_node, tag_optimal_func)
         
         return opt_nids
         
@@ -219,7 +224,7 @@ class PortGrouper(object):
 #--------------------------------------------------------------------------
 def set_defaults(node):
     node.parent = None
-    node.optimal = False
+    node.optimal = 0
 
 def add_parent(node, parent):
     node.parent = parent
@@ -229,19 +234,19 @@ def tag_parent(node):
         add_parent(node.get_left(), node)
         add_parent(node.get_right(), node)
 
-def pre_order_n(self, func=(lambda x: x.id)):
+def pre_order_n(node, func=(lambda x: x.id)):
         """
         modified from ClusterNode src to invoke func at non-leaf nodes as well
         """
 
         # Do a preorder traversal, caching the result. To avoid having to do
         # recursion, we'll store the previous index we've visited in a vector.
-        n = self.count
+        n = node.count
 
         curNode = [None] * (2 * n)
         lvisited = set()
         rvisited = set()
-        curNode[0] = self
+        curNode[0] = node
         k = 0
         preorder = []
         while k >= 0:
