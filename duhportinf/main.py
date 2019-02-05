@@ -3,8 +3,10 @@
 import os
 import sys
 import numpy as np
+import shutil
 import json5
 import argparse
+import subprocess
 from .busdef import BusDef
 from ._optimize import map_ports_to_bus, get_mapping_fcost
 from ._grouper import get_port_grouper
@@ -155,9 +157,8 @@ def main():
     parser.add_argument(
         '-b', '--duh-bus',
         default=None,
-        required=True,
-        help='duh-bus root direcotry that contains bus specifications',
-    )
+        required=False,
+        help='duh-bus root directory that contains bus specifications.  will default to $(duh-bus-which), which requires duh-bus to be installed',)
     parser.add_argument(
         '-o', '--output',
         default=sys.stdout,
@@ -174,14 +175,28 @@ def main():
         sys.exit(1)
     args = parser.parse_args()
 
-    assert os.path.isdir(args.duh_bus), '{} not a directory'.format(args.duh_bus)
     assert os.path.isfile(args.component_json5), '{} does not exist'.format(args.component_json5)
     if args.output != sys.stdout and os.path.dirname(args.output) != '':
         dn = os.path.dirname(args.output)
         assert os.path.isdir(dn), 'output directory {} does not exist'.format(dn)
 
+    # try to invoke duh-bus-which to load bus specs if not specified with -b
+    if args.duh_bus == None:
+        if shutil.which('duh-bus-which'):
+            duh_bus_path = subprocess.check_output('duh-bus-which').strip()
+            duh_bus_path = duh_bus_path.decode('ascii')
+            assert os.path.isdir(duh_bus_path), \
+                "duh-bus not properly installed, please use -b/--duh-bus"
+        else:
+            print('error: duh-bus not installed and -b/--duh-bus not specified')
+            sys.exit(1)
+    else:
+        assert os.path.isdir(args.duh_bus), '{} not a directory'.format(args.duh_bus)
+        duh_bus_path = args.duh_bus
+
+
     all_ports = get_ports_from_json5(args.component_json5)
-    bus_defs = load_bus_defs(args.duh_bus)
+    bus_defs = load_bus_defs(duh_bus_path)
     pg_bus_mappings = get_bus_matches(all_ports, bus_defs)
     util.dump_json_bus_candidates(args.output, pg_bus_mappings)
 

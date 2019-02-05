@@ -23,5 +23,8 @@
   "bugs": {
     "url": "https://github.com/sifive/duhportinf/issues"
   },
-  "homepage": "https://github.com/sifive/duhportinf#readme"
+  "homepage": "https://github.com/sifive/duhportinf#readme",
+  "dependencies": {
+    "duh-bus": "sifive/duh-bus"
+  }
 }
