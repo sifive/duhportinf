@@ -9,8 +9,8 @@ pip install .
 ## Run
 
 ```console
-# abxportinf -h
-usage: abxportinf [-h] -b DUH_BUS [-o OUTPUT] component_json5
+# duhportinf -h
+usage: duhportinf [-h] -b DUH_BUS [-o OUTPUT] component_json5
 
 positional arguments:
   component_json5       input component.json5 with port list of top-level
