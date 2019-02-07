@@ -12,6 +12,30 @@ from .busdef import BusDef
 solvers.options['show_progress'] = False
 solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
+def _get_name_fcost(ports, bus_def):
+
+    def get_tokens(n):
+        n = n.replace('_', '').lower()
+        tokens = []
+        # all pairs, triples of name characters
+        tokens.extend([''.join(cs) for cs in zip(n, n[1:])])
+        tokens.extend([''.join(cs) for cs in zip(n, n[1:], n[2:])])
+        return tokens
+    
+    def flatten(l): 
+        return [e for ll in l for e in ll]
+    
+    # get tokens for all port names and bus def logical names and return
+    # jaccard distance as a measure of compatibility
+    p_tokens  = set(flatten([get_tokens(p[0]) for p in ports]))
+    bd_tokens = set(flatten([
+        get_tokens(p[0]) 
+        for pp in [bus_def.req_ports, bus_def.opt_ports]
+            for p in pp
+    ]))
+    jaccard_index = len(p_tokens & bd_tokens) / len(p_tokens | bd_tokens)
+    return 1 - jaccard_index
+
 def get_mapping_fcost(ports, bus_def):
     """
     coarse cost function to cheaply estimate how good a potential mapping
@@ -20,9 +44,6 @@ def get_mapping_fcost(ports, bus_def):
     def sum_across(keys, cnts):
         return sum([cnts[k] for k in keys])
 
-    # TODO can assign some cost to the closeness of the port name
-    # alphabets (include name/library for bus def)
-    
     # strip name and just match based off of width+direction
     phy_port_cnts = Counter(map(lambda x: tuple(x[1:]), ports))
     bus_req_port_cnts = Counter(map(lambda x: tuple(x[1:]), bus_def.req_ports))
@@ -85,6 +106,10 @@ def get_mapping_fcost(ports, bus_def):
         # the rest of the unmatched ports
         cost += MatchCost(0,1,0)*num_dir_matched
         cost += MatchCost(0,1,1)*ppc
+
+    # determine name compatibility
+    name_cost = _get_name_fcost(ports, bus_def)
+    cost.nc = name_cost*len(ports)
 
     return cost
 
@@ -280,7 +305,7 @@ class MatchCost(object):
         )
 
     # cost weights
-    NAME_W = 1
+    NAME_W = 2
     WIDTH_W = 1
     # heavily penalize directionality mismatch
     #DIR_W = 1

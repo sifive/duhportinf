@@ -88,9 +88,6 @@ def get_bus_matches(ports, bus_defs):
         lambda x : (
             # must be on an optimal path for some port
             x[0] in optimal_nids and
-            # must have less than 5 direction mismatches in the best case
-            # from fcost computation
-            x[1].dc < 5 and
             # at least 4 ports in a group
             len(x[2]) > 3
         ),
