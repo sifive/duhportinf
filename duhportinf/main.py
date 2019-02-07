@@ -54,20 +54,15 @@ def load_bus_defs(rootdir):
     ))
     return bus_defs
 
-def get_bus_matches(ports, bus_defs):
-    # perform hierarchical clustering over ports to get tree grouping
-    print('hierarchically clustering ports and selecting port groups')
-    pg, Z, wire_names = get_port_grouper(ports)
-    print('  - done')
-    
-    # pass over all port groups and compute fcost to prioritize potential
-    # bus pairings to optimize
+
+def _get_bus_pairings(pg, bus_defs):
+    # pass over all initial port groups and compute fcost to prioritize
+    # potential bus pairings to optimize
     # NOTE need to keep track of node id in port group tree to pass back
     # costs and figure out optimal port groupings to expose
     pg_bus_pairings = []
     nid_cost_map = {}
 
-    print('initial bus pairing with port groups')
     for nid, port_group in pg.get_initial_port_groups():
         # for each port group, only pair the 5 bus defs with the lowest fcost
         pg_bus_defs = list(sorted(
@@ -79,10 +74,10 @@ def get_bus_matches(ports, bus_defs):
         nid_cost_map[nid] = l_fcost
     
     # prune port groups in which the lowest fcost is too high to warrant
-    # more expensive bus matching
+    # more expensive bus matching 
     # NOTE don't bother trying to match a particular port group if all the
-    # ports in that group potentially have a better assignment based on
-    # fcost
+    # ports in that group potentially have a better assignment within
+    # different groups based on fcost
     optimal_nids = pg.get_optimal_groups(nid_cost_map)
     opt_pg_bus_pairings = list(sorted(filter(
         lambda x : (
@@ -93,27 +88,33 @@ def get_bus_matches(ports, bus_defs):
         ),
         pg_bus_pairings,
     ), key=lambda x: x[1]))
-    print('  - done')
     #print('initial pg_bus_pairings', len(pg_bus_pairings))
     #print('opt pg_bus_pairings', len(opt_pg_bus_pairings))
 
+    return opt_pg_bus_pairings
+    
+def _get_initial_bus_matches(pg, pg_bus_pairings):
+    
     # perform bus mappings for chosen subset to determine lowest cost bus
     # mapping for each port group
     pg_bus_mappings = []
     nid_cost_map = {}
-    print('bus mapping')
-    ptot = sum([len(bd) for _, _, _, bd in opt_pg_bus_pairings])
+    ptot = sum([len(bd) for _, _, _, bd in pg_bus_pairings])
     plen = min(ptot, 50)
     pcurr = 0
     util.progress_bar(pcurr, ptot, length=plen)
-    for i, (nid, l_fcost, port_group, bus_defs) in enumerate(opt_pg_bus_pairings):
+    for i, (nid, l_fcost, port_group, bus_defs) in enumerate(pg_bus_pairings):
         #print('pairing: {}, lcost:{}, port group size: {}'.format(
         #    i, l_fcost, len(port_group)))
         #print('      ', list(sorted(port_group))[:5])
         bus_mappings = []
         for fcost, bus_def in bus_defs:
-            cost, mapping, sideband_ports, match_cost_func = \
-                map_ports_to_bus(port_group, bus_def)
+            (
+                cost,
+                mapping,
+                sideband_ports,
+                match_cost_func,
+            ) = map_ports_to_bus(port_group, bus_def)
             bus_mappings.append((
                 cost,
                 fcost,
@@ -142,6 +143,20 @@ def get_bus_matches(ports, bus_defs):
         lambda x : x[0] in optimal_nids,
         pg_bus_mappings,
     ), key=lambda x: x[1]))
+    return opt_pg_bus_mappings
+
+def get_bus_matches(ports, bus_defs):
+    print('hierarchically clustering ports and selecting port groups')
+    pg, Z, wire_names = get_port_grouper(ports)
+    print('  - done')
+
+    print('initial bus pairing with port groups')
+    opt_pg_bus_pairings = _get_bus_pairings(pg, bus_defs)
+    print('  - done')
+    
+    print('bus mapping')
+    opt_pg_bus_mappings = _get_initial_bus_matches(pg, opt_pg_bus_pairings)
+    print('  - done')
 
     # return pairings of <port_group, bus_mapping>
     return list(map(lambda x: x[2:], opt_pg_bus_mappings))

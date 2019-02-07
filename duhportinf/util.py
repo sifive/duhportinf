@@ -42,7 +42,7 @@ def progress_bar(
     print(s, end = '\r')
     # erase bar and print complete
     if iteration == total: 
-        print('\r', ' '*len(s), '\r', '  - done')
+        print('\r', ' '*len(s), '\r', end='')
 
 #--------------------------------------------------------------------------
 # json handling
