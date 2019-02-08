@@ -119,7 +119,6 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
                 }], 
             })
             # for all ports in mapping, just include port names and exclude width+direction
-            bm = dict(bm.mapping)
             sbm_map  = {k:v for k,v in bm.sideband_mapping.items() if v != None}
             sbm_umap = [k for k,v in bm.sideband_mapping.items() if v == None]
                 
@@ -128,7 +127,7 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
                 key=lambda x: bm.match_cost_func(x[0], x[1]),
             ))
             mapped_ports = list(sorted(
-                bm.items(),
+                bm.m.items(),
                 key=lambda x: bm.match_cost_func(x[0], x[1]),
             ))
             req_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bm.bus_def.req_ports]

@@ -7,7 +7,6 @@ from cvxopt.modeling import variable, dot, op
 from cvxopt.modeling import sum as cvx_sum
 import editdistance as ed
 from . import util
-from .busdef import BusDef
 
 solvers.options['show_progress'] = False
 solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
@@ -142,34 +141,20 @@ def map_ports_to_bus(ports, bus_def, penalize_umap=True):
         m, n = n, m
         ports1, ports2 = ports2, ports1
         C = C.T
-    
-    c = matrix(C.reshape(m*n))
-    x = variable(m*n)
-    constraints = [
-        x >= 0,
-        x <= 1,
-    ]
-    for i in range(m):
-        #print('setting constraint', i*n, i*n+n)
-        constraints.append(
-            cvx_sum(x[i*n:i*n+n]) == 1
-        )
-        
-    # add constraints so max number of assignments to each port in ports2
-    # is 1 as well
-    for j in range(n):
-        #print(list(range(j, m*n, n)))
-        constraints.append(
-            cvx_sum([x[jj] for jj in range(j, m*n, n)]) <= 1
+
+    def is_satisfiable(X):
+        # test assignment satisfies row/col constraints of assignment
+        # problem
+        return (
+            np.all(np.sum(X,axis=1) == 1) and
+            np.all(np.sum(X,axis=0) <= 1) and
+            np.all(np.sum(X,axis=0) >= 0)
         )
 
-    # NOTE must use external solver (such as glpk), the default one is
-    # _very_ slow
-    op(
-        dot(c, x),
-        constraints,
-    ).solve(solver='glpk')
-    X = np.array(x.value).reshape(m,n) > 0.01
+    X = _get_greedy_assignment(C)
+    if not is_satisfiable(X):
+        X = _get_convex_opt_assignment(C)
+        #assert is_satisfiable(X)
     
     mapping = {ports1[i] : ports2[j] for i, j in np.argwhere(X)}
     if swap:
@@ -206,6 +191,46 @@ def map_ports_to_bus(ports, bus_def, penalize_umap=True):
     cost = MatchCost.normalize(cost, len(ports))
     bus_mapping.cost = cost
     return bus_mapping
+    
+def _get_greedy_assignment(C):
+    # greedily select the lowest cost col port for each row port
+    rsel = np.argmin(C, axis=1)
+    X = np.zeros(C.shape, dtype=bool)
+    rmask = (np.arange(len(rsel)), rsel)
+    X[rmask] = True
+    return X
+
+def _get_convex_opt_assignment(C):
+    m,n = C.shape
+    c = matrix(C.reshape(m*n))
+    x = variable(m*n)
+    constraints = [
+        x >= 0,
+        x <= 1,
+    ]
+    # row constraints
+    for i in range(m):
+        #print('setting constraint', i*n, i*n+n)
+        constraints.append(
+            cvx_sum(x[i*n:i*n+n]) == 1
+        )
+    # col constraints
+    # add constraints so max number of assignments to each port in ports2
+    # is 1 as well
+    for j in range(n):
+        #print(list(range(j, m*n, n)))
+        constraints.append(
+            cvx_sum([x[jj] for jj in range(j, m*n, n)]) <= 1
+        )
+
+    # NOTE must use external solver (such as glpk), the default one is
+    # _very_ slow
+    op(
+        dot(c, x),
+        constraints,
+    ).solve(solver='glpk')
+    X = np.array(x.value).reshape(m,n) > 0.01
+    return X
 
 #--------------------------------------------------------------------------
 # helpers for computing cost function
