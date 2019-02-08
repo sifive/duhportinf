@@ -36,7 +36,7 @@ def _get_name_fcost(ports, bus_def):
     jaccard_index = len(p_tokens & bd_tokens) / len(p_tokens | bd_tokens)
     return 1 - jaccard_index
 
-def get_mapping_fcost(ports, bus_def):
+def get_mapping_fcost(ports, bus_def, penalize_umap=True):
     """
     coarse cost function to cheaply estimate how good a potential mapping
     will be
@@ -105,7 +105,9 @@ def get_mapping_fcost(ports, bus_def):
 
         # the rest of the unmatched ports
         cost += MatchCost(0,1,0)*num_dir_matched
-        cost += MatchCost(0,1,1)*ppc
+        # only penalize if specified
+        if penalize_umap:
+            cost += MatchCost(0,1,1)*ppc
 
     # determine name compatibility
     name_cost = _get_name_fcost(ports, bus_def)
@@ -113,7 +115,7 @@ def get_mapping_fcost(ports, bus_def):
 
     return cost
 
-def map_ports_to_bus(ports, bus_def):
+def map_ports_to_bus(ports, bus_def, penalize_umap=True):
     """
     optimally map ports to bus definition {req, opt} ports by formulating
     as a convex LP and solving
@@ -172,16 +174,38 @@ def map_ports_to_bus(ports, bus_def):
     mapping = {ports1[i] : ports2[j] for i, j in np.argwhere(X)}
     if swap:
         mapping = {v:k for k, v in mapping.items()}
-    sideband_ports = get_side_band_ports(
+    sideband_ports = get_sideband_ports(
         mapping, 
         ports,
         bus_def,
         match_cost_func,
     )
-    cost = mapping_cost_func(mapping, ports, sideband_ports, bus_def)
+    # create a separate 'best guess' mapping for sideband ports
+    # all ports without a primary mapping mapped to None
+    sideband_mapping = {
+        k : v for k,v in mapping.items() if k in sideband_ports
+    }
+    sideband_mapping.update({
+        k : None for k in sideband_ports if k not in mapping
+    })
+    # remove sideband ports from primary mapping
+    for p in sideband_ports:
+        if p in mapping:
+            del mapping[p]
+
+    bus_mapping = BusMapping(
+        mapping = mapping,
+        sideband_mapping = sideband_mapping,
+        match_cost_func = match_cost_func,
+        bus_def = bus_def,
+    )
+    cost = mapping_cost_func(bus_mapping, penalize_umap)
+    assert set(ports).issubset(set(bus_mapping.get_ports())), \
+        "bus mapping port designation broken"
     # normalize cost to the number of physical ports matched
     cost = MatchCost.normalize(cost, len(ports))
-    return cost, mapping, sideband_ports, match_cost_func
+    bus_mapping.cost = cost
+    return bus_mapping
 
 #--------------------------------------------------------------------------
 # helpers for computing cost function
@@ -214,30 +238,21 @@ def get_cost_funcs(ports, bus_def):
     
     # NOTE this function closure actually includes the match_cost_func defined
     # above
-    def mapping_cost_func(mapping, ports, sideband_ports, bus_def):
-        umap_ports = set(ports) - set(mapping.keys())
-        umap_busports = set(bus_def.req_ports) - set(mapping.values())
+    def mapping_cost_func(bm, penalize_umap):
         cost = MatchCost.zero()
-        # add penalties for all mapped signals *except* sidebands, which will be
-        # penalized as unmapped
-        cost += sum([
-            match_cost_func(p1, p2)
-            for p1, p2 in mapping.items()
-                if p1 not in sideband_ports
-        ])
-        # penalize only width+direction for unmapped ports
-        cost += MatchCost(0,1,1)*len(umap_ports)
-        cost += MatchCost(0,1,1)*len(umap_busports)
+        # add penalties for all mapped signals
+        cost += sum([match_cost_func(p1, p2) for p1, p2 in bm.mapping.items()])
         # penalize sideband candidates as unmapped
-        cost += MatchCost(0,1,1)*len(sideband_ports)
+        if penalize_umap:
+            cost += MatchCost(0,1,1)*len(bm.sbm)
+        # penalize only width+direction for unmapped bus ports
+        umap_busports = set(bm.bus_def.req_ports) - set(bm.mapping.values())
+        cost += MatchCost(0,1,1)*len(umap_busports)
         return cost
 
     return match_cost_func, mapping_cost_func
 
-def get_side_band_ports(mapping, ports, bus_def, match_cost_func):
-    umap_ports = set(ports) - set(mapping.keys())
-
-    sideband_ports = set()
+def get_sideband_ports(mapping, ports, bus_def, match_cost_func):
     mapping_costs = [match_cost_func(pp, bp) for pp, bp in mapping.items()]
     med_nc = np.median(list(map(lambda mc: mc.nc, mapping_costs)))
     # any mapped port which has a name cost above the median matched name
@@ -247,9 +262,55 @@ def get_side_band_ports(mapping, ports, bus_def, match_cost_func):
         mapping.items(),
     ))
     sideband_ports = set(sideband_mapping.keys())
+    # include unmapped ports
+    umap_ports = set(ports) - set(mapping.keys())
+    sideband_ports |= umap_ports
     
     return sideband_ports
 
+# FIXME should probably have proper accessors to prevent errors in
+# mutating state
+class BusMapping(object):
+
+    @property
+    def m(self): return self.mapping
+    @property
+    def sbm(self): return self.sideband_mapping
+    @property
+    def mc_func(self): return self.match_cost_func
+
+    @classmethod
+    def duplicate(cls, bm):
+        return cls(
+            cost             = MatchCost.duplicate(bm.cost),
+            mapping          = dict(bm.mapping),
+            sideband_mapping = dict(bm.sideband_mapping),
+            match_cost_func  = bm.match_cost_func,
+            bus_def          = bm.bus_def,
+            fcost            = MatchCost.duplicate(bm.fcost),
+        )
+
+    def __init__(self, **kwargs):
+        self.cost              = None
+        self.mapping           = None
+        self.sideband_mapping  = None
+        self.match_cost_func   = None
+        #self.mapping_cost_func = None
+        self.bus_def           = None
+        self.fcost             = None
+        for k, v in kwargs.items():
+            assert hasattr(self, k), \
+                'invalid kwargs {} for BusMapping'.format(k)
+            setattr(self, k, v)
+        assert None not in [
+            self.mapping,
+            self.sideband_mapping,
+            self.match_cost_func,
+            self.bus_def,
+        ]
+
+    def get_ports(self):
+        return set(self.m.keys()) | set(self.sbm.keys())
 
 def MAKE_BINARY(opfn):
     def op_func(self, other):
@@ -277,6 +338,13 @@ MAKE_RBINARY = lambda opfn : lambda self, other : MatchCost(
 MAKE_COMPARATOR = lambda opfn : lambda self, other : opfn(self.value, other.value)
 
 class MatchCost(object):    
+    # cost weights
+    NAME_W = 2
+    WIDTH_W = 1
+    # heavily penalize directionality mismatch
+    #DIR_W = 1
+    DIR_W = 4
+
     __add__  = MAKE_BINARY(operator.add)
     __sub__  = MAKE_BINARY(operator.sub)
     __mul__  = MAKE_BINARY(operator.mul)
@@ -303,14 +371,6 @@ class MatchCost(object):
             self.wc != other.wc or
             self.dc != other.dc
         )
-
-    # cost weights
-    NAME_W = 2
-    WIDTH_W = 1
-    # heavily penalize directionality mismatch
-    #DIR_W = 1
-    DIR_W = 4
-
     def __neg__(self, other):
         return MatchCost(
             -self.nc,
@@ -319,9 +379,11 @@ class MatchCost(object):
         )
 
     @classmethod
+    def duplicate(cls, mc):
+        return cls(mc.nc, mc.wc, mc.dc)
+    @classmethod
     def zero(cls):
         return cls(0,0,0)
- 
     @classmethod
     def normalize(cls, cost, n):
         """
@@ -351,7 +413,7 @@ class MatchCost(object):
 
     def __str__(self):
         return '{:2.2f}(n:{:2.2f};w:{};d:{})'.format(
-		    self.value,
+            self.value,
             self.nc,
             self.wc,
             self.dc,

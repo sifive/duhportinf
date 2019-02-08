@@ -107,46 +107,34 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
     )):
         bus_mapping_objs = []
         for j, bus_mapping in enumerate(bus_mappings):
-            (
-                cost,
-                fcost,
-                mapping,
-                sideband_ports,
-                match_cost_func,
-                bus_def,
-            ) = bus_mapping
-            portmap_name = 'portmap_{}_{}_{}'.format(i,j, bus_def.abstract_type.name)
+            bm = bus_mapping
+            portmap_name = 'portmap_{}_{}_{}'.format(i,j, bm.bus_def.abstract_type.name)
             o = NoIndent({
                 'port_group_num': i,
-                'interfaceMode': bus_def.driver_type,
-                'busType': bus_def.abstract_type,
+                'interfaceMode': bm.bus_def.driver_type,
+                'busType': bm.bus_def.abstract_type,
                 'abstractionTypes': [{
                     'viewRef': 'RTLview',
                     'portMapRef': portmap_name,
                 }], 
             })
             # for all ports in mapping, just include port names and exclude width+direction
-            bm = dict(mapping)
-            sbm = dict(mapping)
-            for pp in sideband_ports:
-                del bm[pp]
-            for pp in set(mapping.keys()) - sideband_ports:
-                del sbm[pp]
+            bm = dict(bm.mapping)
+            sbm_map  = {k:v for k,v in bm.sideband_mapping.items() if v != None}
+            sbm_umap = [k for k,v in bm.sideband_mapping.items() if v == None]
                 
             mapped_sideband_ports = list(sorted(
-                sbm.items(),
-                key=lambda x: match_cost_func(x[0], x[1]),
+                sbm_map.items(),
+                key=lambda x: bm.match_cost_func(x[0], x[1]),
             ))
             mapped_ports = list(sorted(
                 bm.items(),
-                key=lambda x: match_cost_func(x[0], x[1]),
+                key=lambda x: bm.match_cost_func(x[0], x[1]),
             ))
-            req_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bus_def.req_ports]
-            opt_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bus_def.opt_ports]
+            req_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bm.bus_def.req_ports]
+            opt_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bm.bus_def.opt_ports]
             sideband_names =   [NoIndent((bp[0], pp[0])) for pp, bp in mapped_sideband_ports]
-            # propose all unmapped names as user signals as well, but without a logical mapping
-            umap_ports = list(set(port_group) - set(mapping.keys()))
-            sideband_names.extend([NoIndent((None, pp[0])) for pp in umap_ports])
+            sideband_names.extend([NoIndent((None, pp[0])) for pp in sbm_umap])
             pm_o = [
                 ('req_mapped', req_mapped_names),
                 ('opt_mapped', opt_mapped_names),

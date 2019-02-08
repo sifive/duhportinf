@@ -1,6 +1,7 @@
 import numpy as np
 import json5
 from collections import defaultdict
+from ._optimize import MatchCost
 from . import util
 
 class dotdict(dict):
@@ -53,11 +54,6 @@ class BusDef(object):
             if 'onMaster' in opt_port_map: master_opt_ports.append(opt_port_map['onMaster'])
             if 'onSlave'  in req_port_map: slave_req_ports.append(req_port_map['onSlave'])
             if 'onSlave'  in opt_port_map: slave_opt_ports.append(opt_port_map['onSlave'])
-        
-        #print('num master req ports', len(master_req_ports))
-        #print('num master opt ports', len(master_opt_ports))
-        #print('num slave req ports', len(slave_req_ports))
-        #print('num slave opt ports', len(slave_opt_ports))
         
         bus_defs = []
         if master_req_ports != []:
@@ -178,52 +174,61 @@ class BusDef(object):
 #--------------------------------------------------------------------------
 # debug
 #--------------------------------------------------------------------------
-def debug_bus_mapping(
-    port_group,
-    bus_mapping,
-):
-    (
-        cost,
-        fcost,
-        mapping,
-        sideband_ports,
-        match_cost_func,
-        bus_def,
-    ) = bus_mapping
-
+def debug_bus_mapping(bm):
     debug_str = ''
-    debug_str += str(bus_def)+'\n'
-    debug_str += ('  - cost:{}, fcost:{}'.format(cost, fcost))+'\n'
+    debug_str += str(bm.bus_def)+'\n'
+    debug_str += ('  - cost:{}, fcost:{}'.format(bm.cost, bm.fcost))+'\n'
     debug_str += ('  - mapped')+'\n'
     # display mapped signals in order of best match, staring with required
     # signals
-    for (is_opt, is_sideband, cost), pp, bp in sorted(
+    for (is_opt, cost), pp, bp in sorted(
         [
             (
                 (
-                    bp in set(bus_def.opt_ports), 
-                    pp in sideband_ports,
-                    match_cost_func(pp, bp),
+                    bp in set(bm.bus_def.opt_ports), 
+                    bm.match_cost_func(pp, bp),
                 ), 
                 pp, 
                 bp,
             ) 
-            for pp, bp in mapping.items()
+            for pp, bp in bm.mapping.items()
         ],
         key=lambda x: x[0],
     ):
-        debug_str += ('    - {} cost:{}, {:15s}:{:15s} {}'.format(
-            '*sideband cand*' if is_sideband else '',
-            match_cost_func(pp, bp),
+        debug_str += ('    - cost:{}, {:15s}:{:15s} {}'.format(
+            bm.match_cost_func(pp, bp),
             str(pp), str(bp),
             'opt' if is_opt else 'req',
         ))+'\n'
-    umap_ports = set(port_group) - set(mapping.keys())
-    umap_busports = set(bus_def.req_ports) - set(mapping.values())
-    if len(umap_ports) > 0:
-        debug_str += ('  - umap phy ports')+'\n'
-        for port in sorted(umap_ports):
-            debug_str += ('    - {}'.format(port))+'\n'
+
+    debug_str += ('  - sideband')+'\n'
+    for (is_umap, is_opt, cost), pp, bp in sorted(
+        [
+            (
+                (
+                    bp == None,
+                    bp in set(bm.bus_def.opt_ports), 
+                    MatchCost(1,1,1,) if bp == None else bm.match_cost_func(pp, bp),
+                ), 
+                pp, 
+                bp,
+            ) 
+            for pp, bp in bm.sideband_mapping.items()
+        ],
+        key=lambda x: x[0],
+    ):
+        debug_str += ('    - cost:{}, {:15s}:{:15s} {}'.format(
+            MatchCost(1,1,1) if is_umap else bm.match_cost_func(pp, bp),
+            str(pp), str(bp),
+            '' if is_umap else ('opt' if is_opt else 'req'),
+        ))+'\n'
+
+    # busports unmapped in either primary or sideband mapping
+    umap_busports = (
+        set(bm.bus_def.req_ports) 
+        - set(bm.mapping.values())
+        - set(bm.sideband_mapping.values())
+    )
     if len(umap_busports) > 0:
         debug_str += ('  - umap bus ports')+'\n'
         for port in sorted(umap_busports):
