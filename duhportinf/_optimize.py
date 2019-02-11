@@ -5,7 +5,6 @@ from collections import Counter
 from cvxopt import matrix, solvers
 from cvxopt.modeling import variable, dot, op
 from cvxopt.modeling import sum as cvx_sum
-import editdistance as ed
 from . import util
 
 solvers.options['show_progress'] = False
