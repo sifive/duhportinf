@@ -12,28 +12,12 @@ solvers.options['show_progress'] = False
 solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
 def _get_name_fcost(ports, bus_def):
-
-    def get_tokens(n):
-        n = n.replace('_', '').lower()
-        tokens = []
-        # all pairs, triples of name characters
-        tokens.extend([''.join(cs) for cs in zip(n, n[1:])])
-        tokens.extend([''.join(cs) for cs in zip(n, n[1:], n[2:])])
-        return tokens
-    
-    def flatten(l): 
-        return [e for ll in l for e in ll]
-    
     # get tokens for all port names and bus def logical names and return
     # jaccard distance as a measure of compatibility
-    p_tokens  = set(flatten([get_tokens(p[0]) for p in ports]))
-    bd_tokens = set(flatten([
-        get_tokens(p[0]) 
-        for pp in [bus_def.req_ports, bus_def.opt_ports]
-            for p in pp
-    ]))
-    jaccard_index = len(p_tokens & bd_tokens) / len(p_tokens | bd_tokens)
-    return 1 - jaccard_index
+    port_names = [p[0] for p in ports]
+    bd_names = \
+        [p[0] for pp in [bus_def.req_ports, bus_def.opt_ports] for p in pp]
+    return util.get_jaccard_dist(port_names, bd_names)
 
 def get_mapping_fcost(ports, bus_def, penalize_umap=True):
     """
@@ -238,19 +222,28 @@ def _get_convex_opt_assignment(C):
 def get_cost_funcs(ports, bus_def):
     """
     determine cost functions in a closure with access to bus_def
-    """
+    """ 
+    # find all words in ports occurring at higher frequencing than the
+    # highest frequency word in bus_def and remove
+    #all_bus_words = util.flatten([ 
+    #    list(set(util.words_from_name(p[0])))
+    #    for p in bus_def.all_ports 
+    #])
+    #_, max_bus_freq = Counter(all_bus_words).most_common(1)[0]
+    all_port_words = util.flatten([
+        list(set(util.words_from_name(p[0])))
+        for p in ports
+    ])
+    dup_words = set()
+    for w, cnt in Counter(all_port_words).most_common():
+        if cnt == len(ports):
+            dup_words.add(w)
 
     def match_cost_func(phy_port, bus_port):
-        
-        def name_dist(w1, w2):
-            return ed.eval(w1, w2)
-            #return ed.eval(w1, w2) / max(len(w1), len(w2))
-    
-        p_words = util.words_from_name(phy_port[0])
+
+        p_words = set(util.words_from_name(phy_port[0])) - dup_words
         b_words = bus_def.words_from_name(bus_port[0])
-        cost_n = 0
-        for b_word in b_words:
-            cost_n += min(map(lambda w: name_dist(b_word, w), p_words))
+        cost_n = util.get_jaccard_dist(p_words, b_words)
         
         return MatchCost(
             # name attr mismatch
@@ -278,16 +271,25 @@ def get_cost_funcs(ports, bus_def):
     return match_cost_func, mapping_cost_func
 
 def get_sideband_ports(mapping, ports, bus_def, match_cost_func):
-    mapping_costs = [match_cost_func(pp, bp) for pp, bp in mapping.items()]
-    med_nc = np.median(list(map(lambda mc: mc.nc, mapping_costs)))
-    # any mapped port which has a name cost above the median matched name
-    # cost is a candidate sideband signal
+
+    # designate phy ports as sideband based on the number of tokens from
+    # the bus_def port that are missing from the tokens in the mapped phy
+    # port
+    num_missing_tokens = [
+        util.get_num_missing_tokens(bp[0], pp[0]) 
+        for pp, bp in mapping.items()
+    ]
+    # label mappings as sideband if they are missing more than 1 token
+    # than the median mapping
+    cutoff = np.median(num_missing_tokens) + 1
     sideband_mapping = dict(filter(
-        lambda x: match_cost_func(x[0], x[1]).nc > med_nc,
+        lambda x: (
+            util.get_num_missing_tokens(x[1][0], x[0][0]) > cutoff
+        ),
         mapping.items(),
     ))
     sideband_ports = set(sideband_mapping.keys())
-    # include unmapped ports
+    # include unmapped ports as sideband as well
     umap_ports = set(ports) - set(mapping.keys())
     sideband_ports |= umap_ports
     

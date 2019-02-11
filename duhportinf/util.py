@@ -13,6 +13,40 @@ def words_from_name(name):
     words = name.split('_')
     return words
 
+def flatten(l): 
+    return [e for ll in l for e in ll]
+
+def get_tokens(n):
+    """all pairs and triples within a string or iterable of strings"""
+    if type(n) in [list, set, tuple]:
+        return flatten([_get_tokens(nn) for nn in n])
+    else:
+        return _get_tokens(n)
+
+def _get_tokens(n):
+    n = n.replace('_', '').lower()
+    tokens = [c for c in n]
+    tokens.extend([''.join(cs) for cs in zip(n, n[1:])])
+    tokens.extend([''.join(cs) for cs in zip(n, n[1:], n[2:])])
+    return tokens
+
+def get_jaccard_dist(n1, n2):
+    """
+    jaccard distance of all tokens within n1 and n2 (strings or list,set)
+    """
+    n1t = set(get_tokens(n1))
+    n2t = set(get_tokens(n2))
+    jaccard_index = len(n1t & n2t) / len(n1t | n2t)
+    return 1 - jaccard_index
+
+def get_num_missing_tokens(n1, n2):
+    """"
+    return fraction of tokens in n1 present in the tokens of n2
+    """
+    n1t = set(get_tokens(n1))
+    n2t = set(get_tokens(n2))
+    return len(n1t - n2t)
+
 def progress_bar(
     iteration,
     total,

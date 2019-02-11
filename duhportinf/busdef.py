@@ -136,6 +136,11 @@ class BusDef(object):
     def req_ports(self): return list(self._req_ports)
     @property
     def opt_ports(self): return list(self._opt_ports)
+    @property
+    def all_ports(self): 
+        l = list(self._req_ports)
+        l.extend(self._opt_ports)
+        return l
     
     def words_from_name(self, port_name):
         attrs = [
@@ -201,7 +206,8 @@ def debug_bus_mapping(bm):
             'opt' if is_opt else 'req',
         ))+'\n'
 
-    debug_str += ('  - sideband')+'\n'
+    if len(bm.sideband_mapping) > 0:
+        debug_str += ('  - sideband')+'\n'
     for (is_umap, is_opt, cost), pp, bp in sorted(
         [
             (
