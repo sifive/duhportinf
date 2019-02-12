@@ -1,0 +1,80 @@
+{
+  abstractionDefinition: {
+    vendor: 'sifive.com',
+    library: 'MEM',
+    name: 'DPRAM_rtl',
+    version: '0.1.0',
+    busType: {
+      vendor: 'sifive.com',
+      library: 'MEM',
+      name: 'DPRAM',
+      version: '0.1.0',
+    },
+    ports: {
+      WCLK: {
+        requiresDriver: true,
+        isClock: true,
+        wire: {
+          onMaster: {width: 1, direction: 'in', presence: 'optional'},
+          onSlave:  {width: 1, direction: 'in', presence: 'optional'}
+        }
+      },
+      RCLK: {
+        requiresDriver: true,
+        isClock: true,
+        wire: {
+          onMaster: {width: 1, direction: 'in', presence: 'optional'},
+          onSlave:  {width: 1, direction: 'in', presence: 'optional'}
+        }
+      },
+      WEN: {
+        wire: {
+          onMaster: {width: 1, direction: 'out', presence: 'required'},
+          onSlave:  {width: 1, direction: 'in', presence: 'required'}
+        }
+      },
+      REN: {
+        wire: {
+          onMaster: {width: 1, direction: 'out', presence: 'required'},
+          onSlave:  {width: 1, direction: 'in', presence: 'required'}
+        }
+      },
+      BEN: {
+        wire: {
+          onMaster: {width: 'BEN_WIDTH', direction: 'out', presence: 'optional'},
+          onSlave:  {width: 'BEN_WIDTH', direction: 'in', presence: 'optional'}
+        }
+      },
+      WADDR: {
+        wire: {
+          onMaster: {width: 'ADDR_WIDTH', direction: 'out', presence: 'required'},
+          onSlave:  {width: 'ADDR_WIDTH', direction: 'in', presence: 'required'}
+        }
+      },
+      WDATA: {
+        wire: {
+          onMaster: {width: 'DATA_WIDTH', direction: 'out', presence: 'required'},
+          onSlave:  {width: 'DATA_WIDTH', direction: 'in', presence: 'required'}
+        }
+      },
+      RADDR: {
+        wire: {
+          onMaster: {width: 'ADDR_WIDTH', direction: 'out', presence: 'required'},
+          onSlave:  {width: 'ADDR_WIDTH', direction: 'in', presence: 'required'}
+        }
+      },
+      RDATA: {
+        wire: {
+          onMaster: {width: 'DATA_WIDTH', direction: 'in', presence: 'required'},
+          onSlave:  {width: 'DATA_WIDTH', direction: 'out', presence: 'required'}
+        }
+      },
+      RDERR: {
+        wire: {
+          onMaster: {direction: 'in', presence: 'optional'},
+          onSlave:  {direction: 'out', presence: 'optional'}
+        }
+      }
+    }
+  }
+}

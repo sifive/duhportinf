@@ -96,16 +96,42 @@ class Grouper(unittest.TestCase):
         # must see all three full prefix groups
         self.assertEqual(len(seen_prefix), 3)
 
+class Fcost(unittest.TestCase):
+
+    def setUp(self):
+        self.bus_defs, self.mem_bus_defs = _load_test_bus_defs()
+    
+    def test_pcie_dpram(self):
+        # these are not going to map well to the logical definitions, but
+        # fcost computation was previously broken due to hardcoded
+        # constant
+        ports = [
+            ('scram_wren', None, -1),
+            ('scram_wraddr', None, -1),
+            ('scram_rden', None, -1),
+            ('scram_rdaddr', None, -1),
+            ('scram_wrdata', None, -1),
+            ('scram_rddata', None, 1),
+            ('scram_rdderr', None, 1),
+        ]
+        dpram_master_bd = next(filter(
+            lambda bd: (
+                bd.abstract_type.name == 'DPRAM_rtl' and 
+                bd.driver_type == 'master'
+            ),
+            self.mem_bus_defs,
+        ))
+        fcost = _optimize.get_mapping_fcost(ports, dpram_master_bd)
+        self.assertEqual(fcost.dc, 1)
+        self.assertEqual(fcost.wc, 2)
+
+    def tearDown(self):
+        pass
+
 class BusMapping(unittest.TestCase):
 
     def setUp(self):
-        self.bus_defs = []
-        bsdir = os.path.join(
-            os.path.dirname(__file__),
-            'test-bus-specs',
-        )
-        spec_path = os.path.join(bsdir, 'AXI4_rtl.json5')
-        self.bus_defs.extend(BusDef.bus_defs_from_spec(spec_path))                
+        self.bus_defs, self.mem_bus_defs = _load_test_bus_defs()
 
     def test_ddr_axi4(self):
         true_sideband_ports = set([
@@ -216,4 +242,17 @@ def _filt_inputs(input_mappings, bus_defs):
     print('filtered')
     for x in filt_mappings:
         print('{},'.format(x))
+
+# load test bus defs
+def _load_test_bus_defs():
+    bus_defs = []
+    bsdir = os.path.join(
+        os.path.dirname(__file__),
+        'test-bus-specs',
+    )
+    spec_path = os.path.join(bsdir, 'AXI4_rtl.json5')
+    bus_defs.extend(BusDef.bus_defs_from_spec(spec_path))
+    spec_path = os.path.join(bsdir, 'DPRAM_rtl.json5')
+    mem_bus_defs = BusDef.bus_defs_from_spec(spec_path)
+    return bus_defs, mem_bus_defs
 

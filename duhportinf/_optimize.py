@@ -77,7 +77,7 @@ def get_mapping_fcost(ports, bus_def, penalize_umap=True):
         
         cost += MatchCost(0,1,0)*num_dir_matched
         # add harsh penalty for unmatched bus ports
-        cost += 4*MatchCost(0,1,1)*brc
+        cost += MatchCost(0,1,1)*brc
 
         # then match optional ports (no cost for unmatched optional bus
         # ports)
