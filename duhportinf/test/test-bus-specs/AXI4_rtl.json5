@@ -1,0 +1,516 @@
+{
+  abstractionDefinition: {
+    vendor: 'amba.com',
+    library: 'AMBA4',
+    name: 'AXI4_rtl',
+    version: 'r0p0_0',
+    busType: {
+      vendor: 'amba.com',
+      library: 'AMBA4',
+      name: 'AXI4',
+      version: 'r0p0_0',
+    },
+    ports: {
+      ACLK: {
+        logicalName: 'ACLK',
+        wire: {
+          isClock: true,
+          onMaster: {
+            presence: 'optional',
+            width: 1,
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 1,
+            direction: 'in',
+          },
+          requiresDriver: true,
+        },
+      },
+      ACLKEN: {
+        logicalName: 'ACLKEN',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 1,
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 1,
+            direction: 'in',
+          },
+          defaultValue: 1,
+        },
+        vendorExtensions: [],
+      },
+      AWADDR: {
+        logicalName: 'AWADDR',
+        wire: {
+          isAddress: true,
+          onMaster: {
+            presence: 'required',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            direction: 'in',
+          },
+        },
+      },
+      AWBURST: {
+        logicalName: 'AWBURST',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 2,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 2,
+            direction: 'in',
+          },
+          defaultValue: 1,
+        },
+      },
+      AWLOCK: {
+        logicalName: 'AWLOCK',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 1,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 1,
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      AWQOS: {
+        logicalName: 'AWQOS',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 4,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 4,
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      AWVALID: {
+        logicalName: 'AWVALID',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+        },
+      },
+      AWREADY: {
+        logicalName: 'AWREADY',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+        },
+      },
+      WID: {
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 4,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 4,
+            direction: 'in',
+          },
+        }
+      },
+      WDATA: {
+        logicalName: 'WDATA',
+        wire: {
+          isData: true,
+          onMaster: {
+            presence: 'required',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            direction: 'in',
+          },
+        },
+        vendorExtensions: [],
+      },
+      WSTRB: {
+        logicalName: 'WSTRB',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            direction: 'in',
+          },
+          defaultValue: '0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',
+        },
+      },
+      WVALID: {
+        logicalName: 'WVALID',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+        },
+      },
+      WREADY: {
+        logicalName: 'WREADY',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+        },
+      },
+      BVALID: {
+        logicalName: 'BVALID',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+        },
+      },
+      BREADY: {
+        logicalName: 'BREADY',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+        },
+      },
+      ARADDR: {
+        logicalName: 'ARADDR',
+        wire: {
+          isAddress: true,
+          onMaster: {
+            presence: 'required',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARLEN: {
+        logicalName: 'ARLEN',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 8,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 8,
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARSIZE: {
+        logicalName: 'ARSIZE',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 3,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 3,
+            direction: 'in',
+          },
+        },
+        vendorExtensions: [],
+      },
+      ARBURST: {
+        logicalName: 'ARBURST',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 2,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 2,
+            direction: 'in',
+          },
+          defaultValue: 1,
+        },
+      },
+      ARLOCK: {
+        logicalName: 'ARLOCK',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 1,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 1,
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARCACHE: {
+        logicalName: 'ARCACHE',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 4,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 4,
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARPROT: {
+        logicalName: 'ARPROT',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 3,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 3,
+            direction: 'in',
+          },
+        },
+      },
+      ARQOS: {
+        logicalName: 'ARQOS',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            width: 4,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            width: 4,
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARVALID: {
+        logicalName: 'ARVALID',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+        },
+      },
+      ARREADY: {
+        logicalName: 'ARREADY',
+        wire: {
+          onMaster: {
+            presence: 'required',
+            width: 1,
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'required',
+            width: 1,
+            direction: 'out',
+          },
+        },
+      },
+      RID: {
+        logicalName: 'RID',
+        description: 'Read ID tag. This signal is the ID tag of the read data group of signals. The RID value is generated by the slave and must match the ARID value of the read transaction to which it is responding.',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'out',
+          },
+        },
+      },
+      AWID: {
+        logicalName: 'AWID',
+        description: 'Write address ID. This signal is the identification tag for the write address group of signals.',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARID: {
+        logicalName: 'ARID',
+        description: 'Read address ID. This signal is the identification tag for the read address group of signals.',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      AWUSER: {
+        logicalName: 'AWUSER',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      WUSER: {
+        logicalName: 'WUSER',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      BUSER: {
+        logicalName: 'BUSER',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          defaultValue: 0,
+        },
+      },
+      ARUSER: {
+        logicalName: 'ARUSER',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          defaultValue: 0,
+        },
+      },
+      RUSER: {
+        logicalName: 'RUSER',
+        wire: {
+          onMaster: {
+            presence: 'optional',
+            direction: 'in',
+          },
+          onSlave: {
+            presence: 'optional',
+            direction: 'out',
+          },
+          defaultValue: 0,
+        },
+      },
+    },
+    vendorExtensions: [],
+  },
+}
