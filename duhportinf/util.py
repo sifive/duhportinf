@@ -135,17 +135,21 @@ def dump_json_bus_candidates(output, pg_bus_mappings, debug=False):
 
     def json_format(p):
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
+    def ref_from_name(name):
+        return {'$ref': '#/busDefinitions/{}'.format(name)}
     
     portgroup_objs = []
     busint_objs = []
     busint_obj_map = {}
     busint_refs = []
+    busint_alt_refs = []
     for i, (port_group, bus_mappings) in enumerate(sorted(
         pg_bus_mappings,
         key=lambda x: len(x[0]),
         reverse=True,
         #key=lambda x: x[1][0][0],
     )):
+        pg_busints = []
         for j, bus_mapping in enumerate(bus_mappings):
             bm = bus_mapping
             busint_name = 'busint-portgroup_{}-{}-{}-{}'.format(
@@ -193,18 +197,21 @@ def dump_json_bus_candidates(output, pg_bus_mappings, debug=False):
                     'portMaps': portmap_o if not debug else debug_port_map_o,
                 }], 
             }
-            busint_objs.append(o)
-            busint_obj_map[busint_name] = o
-            busint_refs.append(
-                NoIndent({'$ref': '#/busDefinitions/{}'.format(busint_name)})
-            )
-        
+            pg_busints.append((busint_name, o))
+
+        busint_objs.extend([o for name, o in pg_busints])
+        busint_refs.append(ref_from_name(pg_busints[0][0]))
+        busint_alt_refs.extend(
+            [ref_from_name(name) for name, o in pg_busints[1:]]
+        )
+        busint_obj_map.update({name:o for name, o in pg_busints})
         pgo = ('portgroup_{}'.format(i), [NoIndent(json_format(p)) for p in sorted(port_group)])
         portgroup_objs.append(pgo)
         
     o = {
         'busDefinitions' : busint_obj_map,
-        'busInterfaces' : busint_refs,
+        'busInterfaces' : [NoIndent(o) for o in busint_refs],
+        'busInterfaceAlts' : [NoIndent(o) for o in busint_alt_refs],
     }
     if debug:
         o = [
