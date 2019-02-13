@@ -126,32 +126,29 @@ class PrettyPrintEncoder(json.JSONEncoder):
 
         return json_repr
 
-def dump_json_bus_candidates(output, pg_bus_mappings):
+def dump_json_bus_candidates(output, pg_bus_mappings, debug=False):
 
     def json_format(p):
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
     
-    portmap_objs = []
     portgroup_objs = []
+    busint_objs = []
+    busint_obj_map = {}
+    busint_refs = []
     for i, (port_group, bus_mappings) in enumerate(sorted(
         pg_bus_mappings,
         key=lambda x: len(x[0]),
         reverse=True,
         #key=lambda x: x[1][0][0],
     )):
-        bus_mapping_objs = []
         for j, bus_mapping in enumerate(bus_mappings):
             bm = bus_mapping
-            portmap_name = 'portmap_{}_{}_{}'.format(i,j, bm.bus_def.abstract_type.name)
-            o = NoIndent({
-                'port_group_num': i,
-                'interfaceMode': bm.bus_def.driver_type,
-                'busType': bm.bus_def.abstract_type,
-                'abstractionTypes': [{
-                    'viewRef': 'RTLview',
-                    'portMapRef': portmap_name,
-                }], 
-            })
+            busint_name = 'busint-portgroup_{}-{}-{}-{}'.format(
+                i,
+                j,
+                bm.bus_def.driver_type,
+                bm.bus_def.abstract_type.name,
+            )
             # for all ports in mapping, just include port names and exclude width+direction
             sbm_map  = {k:v for k,v in bm.sideband_mapping.items() if v != None}
             sbm_umap = [k for k,v in bm.sideband_mapping.items() if v == None]
@@ -164,31 +161,54 @@ def dump_json_bus_candidates(output, pg_bus_mappings):
                 bm.m.items(),
                 key=lambda x: bm.match_cost_func(x[0], x[1]),
             ))
+            # format portmap object
+            portmap_o = {}
+            portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_ports})
+            portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_sideband_ports})
+            if len(sbm_umap) > 0:
+                portmap_o['__UMAP__'] = [p[0] for p in sbm_umap]
+
+            # format debug portmap object that tags req, opt, sideband signals
             req_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bm.bus_def.req_ports]
             opt_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bm.bus_def.opt_ports]
             sideband_names =   [NoIndent((bp[0], pp[0])) for pp, bp in mapped_sideband_ports]
             sideband_names.extend([NoIndent((None, pp[0])) for pp in sbm_umap])
-            pm_o = [
+            debug_portmap_o = [
                 ('req_mapped', req_mapped_names),
                 ('opt_mapped', opt_mapped_names),
                 ('user_sideband', sideband_names),
                 ('unmapped', []),
             ]
-            bus_mapping_objs.append(o)
-            portmap_objs.append((portmap_name, pm_o))
+            o = {
+                'name': busint_name,
+                'interfaceMode': bm.bus_def.driver_type,
+                'busType': bm.bus_def.abstract_type,
+                'abstractionTypes': [{
+                    'viewRef': 'RTLview',
+                    'portMaps': portmap_o if not debug else debug_port_map_o,
+                }], 
+            }
+            busint_objs.append(o)
+            busint_obj_map[busint_name] = o
+            busint_refs.append(
+                NoIndent({'$ref': '#/busDefinitions/{}'.format(busint_name)})
+            )
         
-        pgo = [
-            ('port_group_num', i),
-            ('ports', [NoIndent(json_format(p)) for p in sorted(port_group)]),
-            ('busInterfaces', bus_mapping_objs),
-        ]
+        pgo = ('portgroup_{}'.format(i), [NoIndent(json_format(p)) for p in sorted(port_group)])
         portgroup_objs.append(pgo)
         
-    o = [
-        ('port_groups' , portgroup_objs),
-        ('port_maps' , portmap_objs),
-    ]
+    o = {
+        'busDefinitions' : busint_obj_map,
+        'busInterfaces' : busint_refs,
+    }
+    if debug:
+        o = [
+            ('portGroups', portgroup_objs),
+            ('busInterfaces', busint_refs),
+            ('busDefinitions', busint_objs),
+        ]
     s = json.dumps(o, indent=4, cls=PrettyPrintEncoder)
+
     if hasattr(output, 'write'):
         _ = output.write(s)
     else:
