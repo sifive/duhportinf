@@ -13,19 +13,6 @@ from ._grouper import get_port_grouper
 from . import busdef
 from . import util
 
-def get_ports_from_json5(comp_json5_path):
-    with open(comp_json5_path) as fin:
-        block = json5.load(fin)
-    ports = []
-    for name, pw in block['definitions']['ports'].items():
-        try:
-            w, d = np.abs(pw), np.sign(pw)
-        except Exception as e:
-            #print('Warning', (name, pw), 'not correctly parsed')
-            w, d = None, np.sign(-1) if pw[0] == '-' else np.sign(1)
-        ports.append( (name, w, d) )
-    return ports
-
 def get_bus_defs(spec_path):
     assert os.path.isfile(spec_path)
     assert BusDef.is_spec_bus_def(spec_path), \
@@ -153,7 +140,8 @@ def _map_residual(port_group, _src_bm, bus_defs):
         for fcost, bus_def in pg_bus_defs
     ], key=lambda bm: bm.cost))
     
-    # greedily accept new bus mappings in which bus_def.req_ports have not already been accepted
+    # greedily accept new bus mappings in which bus_def.req_ports have not
+    # already been accepted
     assn_ports = set()
     sel_bus_mappings = [src_bm]
     for bm in bus_mappings:
@@ -176,7 +164,8 @@ def _map_residual(port_group, _src_bm, bus_defs):
         )
     
     # assign src sideband ports to best possible destination
-    # if none of the selected bus mappings map it is a primary port, pick the sideband mapping with the lowest cost
+    # if none of the selected bus mappings map it is a primary port, pick
+    # the sideband mapping with the lowest cost
     port_bmcosts = defaultdict(list)
     for port in port_group:
         port_bmcosts[port].append(
@@ -260,11 +249,16 @@ def main():
         assert os.path.isdir(args.duh_bus), '{} not a directory'.format(args.duh_bus)
         duh_bus_path = args.duh_bus
 
-
-    all_ports = get_ports_from_json5(args.component_json5)
+    with open(args.component_json5) as fin:
+        block = json5.load(fin)
+    all_ports = util.format_ports(block['definitions']['ports'])
     bus_defs = load_bus_defs(duh_bus_path)
     pg_bus_mappings = get_bus_matches(all_ports, bus_defs)
-    util.dump_json_bus_candidates(args.output, pg_bus_mappings)
+    util.dump_json_bus_candidates(
+        args.output,
+        args.component_json5,
+        pg_bus_mappings,
+    )
 
 if __name__ == '__main__':
     main()

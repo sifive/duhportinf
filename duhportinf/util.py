@@ -1,7 +1,23 @@
 from itertools import chain
 from _ctypes import PyObj_FromPtr
 import json
+import json5
 import re
+
+def format_ports(in_ports):
+    """
+    convert input component.json5 port shorthand to
+    (port_name, width, dir)
+    """
+    fmt_ports = []
+    for name, pw in in_ports.items():
+        try:
+            w, d = np.abs(pw), np.sign(pw)
+        except Exception as e:
+            #print('Warning', (name, pw), 'not correctly parsed')
+            w, d = None, np.sign(-1) if pw[0] == '-' else np.sign(1)
+        fmt_ports.append((name, w, d))
+    return fmt_ports
 
 def words_from_name(name):
     # convert camelcase to '_'
@@ -131,7 +147,12 @@ class PrettyPrintEncoder(json.JSONEncoder):
 
         return json_repr
 
-def dump_json_bus_candidates(output, pg_bus_mappings, debug=False):
+def dump_json_bus_candidates(
+    output,
+    component_json5,
+    pg_bus_mappings,
+    debug=False,
+):
 
     def json_format(p):
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
@@ -208,18 +229,31 @@ def dump_json_bus_candidates(output, pg_bus_mappings, debug=False):
         pgo = ('portgroup_{}'.format(i), [NoIndent(json_format(p)) for p in sorted(port_group)])
         portgroup_objs.append(pgo)
         
-    o = {
-        'busDefinitions' : busint_obj_map,
-        'busInterfaces' : [NoIndent(o) for o in busint_refs],
-        'busInterfaceAlts' : [NoIndent(o) for o in busint_alt_refs],
-    }
+    # update input block object with mapped bus interfaces and alternates
+    with open(component_json5) as fin:
+        block_obj = json5.load(fin)
+    assert 'definitions' in block_obj, \
+        'component key not defined in input block object'
+    block_obj['definitions']['busDefinitions'] = busint_obj_map
+    assert 'component' in block_obj, \
+        'component key not defined in input block object'
+    comp_obj = block_obj['component']
+    bkey = 'busInterfaces' 
+    if bkey not in comp_obj:
+        comp_obj[bkey] = []
+    comp_obj[bkey].extend([NoIndent(o) for o in busint_refs])
+    abkey = 'busInterfaceAlts' 
+    if abkey not in comp_obj:
+        comp_obj[abkey] = []
+    comp_obj[abkey].extend([NoIndent(o) for o in busint_alt_refs])
+
     if debug:
-        o = [
+        block_obj = [
             ('portGroups', portgroup_objs),
             ('busInterfaces', busint_refs),
             ('busDefinitions', busint_objs),
         ]
-    s = json.dumps(o, indent=4, cls=PrettyPrintEncoder)
+    s = json.dumps(block_obj, indent=4, cls=PrettyPrintEncoder)
 
     if hasattr(output, 'write'):
         _ = output.write(s)
