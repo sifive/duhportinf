@@ -9,12 +9,17 @@ def words_from_name(name):
     # always return lower case so case insensitive
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     ## insert '_' in between names and numbers
-    #name = re.sub('([a-zA-Z])([0-9])', r'\1_\2', name).lower()
+    name = re.sub('([a-zA-Z])([0-9])', r'\1_\2', name).lower()
     words = name.split('_')
     return words
 
 def flatten(l): 
     return [e for ll in l for e in ll]
+
+def is_range(digits):
+    assert all([type(d) == int for d in digits])
+    return tuple(sorted(digits)) == tuple(range(min(digits), max(digits)+1))
+
 
 def get_tokens(n):
     """all pairs and triples within a string or iterable of strings"""

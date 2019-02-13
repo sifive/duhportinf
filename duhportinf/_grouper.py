@@ -1,3 +1,4 @@
+from abc import ABC
 import numpy as np
 from scipy.cluster.hierarchy import linkage, to_tree
 from scipy.spatial.distance import pdist
@@ -220,6 +221,89 @@ class PortGrouper(object):
         
         return opt_nids
         
+#--------------------------------------------------------------------------
+# port group designations
+#--------------------------------------------------------------------------
+def get_bundle_designation(ports):
+    names  = [p[0] for p in ports]
+    widths = [p[1] for p in ports]
+    dirs   = [p[2] for p in ports]
+    same_dir = (len(set(dirs)) == 1)
+    same_width = (len(set(widths)) == 1)
+    vindex_idx = VectorBundle.get_vector_index(ports)
+    if same_dir and same_width and vindex_idx != -1:
+        return VectorBundle(ports, vindex_idx)
+    elif same_dir:
+        return DirectedBundle(ports)
+    else:
+        return UndirectedBundle(ports)
+
+class Bundle(ABC):
+
+    @property
+    def ports(self):
+        return iter(self._ports)
+
+    @property
+    def prefix(self):
+        "Given a list of names, returns the longest common leading component"
+        port_names = [p[0] for p in self.ports]
+        n1 = min(port_names)
+        n2 = max(port_names)
+        for i, c in enumerate(n1):
+            if c != n2[i]:
+                return n1[:i] 
+        return n1
+
+    def __init__(self, ports):
+        assert len(ports) > 1
+        self._ports = ports
+
+class VectorBundle(Bundle):
+
+    @classmethod
+    def get_vector_index(cls, ports):
+        name_words = [util.words_from_name(p[0]) for p in ports]
+        diff_idxs = [
+            (i, word_group)
+            for i, word_group in enumerate(zip(*name_words))
+                if len(set(word_group)) > 1
+        ]
+        if len(diff_idxs) != 1:
+            return -1
+        # check all words in group are digits and form a range
+        idx, word_group = diff_idxs[0]
+        all_digits = all([w.isdigit() for w in word_group])
+        if not all_digits:
+            return -1
+        indexes = [int(w) for w in word_group]
+        return idx if util.is_range(indexes) else -1
+
+    @property
+    def range(self):
+        return range(self._min, self._max+1)
+
+    def __init__(self, ports, vindex):
+        super(self.__class__, self).__init__(ports)
+        name_words = [util.words_from_name(p[0]) for p in self.ports]
+        index_words = list(zip(*name_words))[vindex]
+        assert all([w.isdigit() for w in index_words])
+        indexes = [int(w) for w in index_words]
+        assert util.is_range(indexes)
+        self._min = min(indexes)
+        self._max = max(indexes)
+
+class DirectedBundle(Bundle):
+    def __init__(self, ports):
+        super(self.__class__, self).__init__(ports)
+        dirs = [p[2] for p in self.ports]
+        same_dir = (len(set(dirs)) == 1)
+        assert same_dir
+
+class UndirectedBundle(Bundle):
+    def __init__(self, ports):
+        super(self.__class__, self).__init__(ports)
+
 #--------------------------------------------------------------------------
 # ClusterNode helpers
 #--------------------------------------------------------------------------

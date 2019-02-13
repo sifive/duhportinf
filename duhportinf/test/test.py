@@ -1,12 +1,53 @@
 import os
 import unittest
 
+from .. import util
 from .. import _grouper 
 from .. import _optimize 
 from ..busdef import BusDef
 
-def fun(x):
-    return x + 1
+class BundleRecognizer(unittest.TestCase):
+
+    def test_recognize_vector(self):
+       
+        def check_type(ports, cls):
+            bundle = _grouper.get_bundle_designation(ports)
+            self.assertEqual(type(bundle), cls)
+        def check_prefix(ports, prefix):
+            bundle = _grouper.get_bundle_designation(ports)
+            self.assertEqual(bundle.prefix, prefix)
+
+        vector_ports = [('test_bit{}_n'.format(i), 1, 1) for i in range(20)]
+        bundle1 = _grouper.get_bundle_designation(vector_ports)
+        self.assertEqual(type(bundle1), _grouper.VectorBundle)
+        self.assertEqual(min(bundle1.range), 0)
+        self.assertEqual(max(bundle1.range), 19)
+        self.assertEqual(bundle1.prefix, 'test_bit')
+
+        # skip indices so designation should be directed bundle, *not*
+        # vector
+        directed_ports1 = list(vector_ports)
+        directed_ports1.append(('test_bit30_n', 1, 1))
+        check_type(directed_ports1, _grouper.DirectedBundle)
+
+        directed_ports2 = list(vector_ports)
+        # change width of one port so designation should be directed
+        # bundle, *not* vector
+        directed_ports2[0] = ('test_bit0_n', 2, 1)
+        check_type(directed_ports2, _grouper.DirectedBundle)
+
+        directed_ports2 = list(vector_ports)
+        # change direction of another port so designation should be
+        # undirected bundle
+        directed_ports2[1] = ('test_bit1_n', 2, -1)
+        check_type(directed_ports2, _grouper.UndirectedBundle)
+
+        # test prefixing
+        ports3 = list(vector_ports)
+        ports3.append(('test_bad', 1, 1))
+        check_prefix(ports3, 'test_b')
+        ports3.append(('ntest_bad', 1, 1))
+        check_prefix(ports3, '')
 
 class Grouper(unittest.TestCase):
 
