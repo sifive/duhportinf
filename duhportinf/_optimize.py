@@ -11,12 +11,17 @@ solvers.options['show_progress'] = False
 solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
 def _get_name_fcost(ports, bus_def):
-    # get tokens for all port names and bus def logical names and return
-    # jaccard distance as a measure of compatibility
-    port_names = [p[0] for p in ports]
-    bd_names = \
-        [p[0] for pp in [bus_def.req_ports, bus_def.opt_ports] for p in pp]
-    return util.get_jaccard_dist(port_names, bd_names)
+    dup_words = get_dup_words(ports)
+    # get tokens for all port names (less duplicate words appearing in all
+    # signals) and bus def logical names and return jaccard distance as a
+    # measure of compatibility
+    p_words = set(util.flatten([util.words_from_name(p[0]) for p in ports]))
+    p_words -= dup_words
+    b_words = set(util.flatten([
+        bus_def.words_from_name(p[0])
+        for pp in [bus_def.req_ports, bus_def.opt_ports] for p in pp
+    ]))
+    return util.get_jaccard_dist(p_words, b_words)
 
 def get_mapping_fcost(ports, bus_def, penalize_umap=True):
     """
@@ -218,17 +223,10 @@ def _get_convex_opt_assignment(C):
 #--------------------------------------------------------------------------
 # helpers for computing cost function
 #--------------------------------------------------------------------------
-def get_cost_funcs(ports, bus_def):
+def get_dup_words(ports):
     """
-    determine cost functions in a closure with access to bus_def
-    """ 
-    # find all words in ports occurring at higher frequencing than the
-    # highest frequency word in bus_def and remove
-    #all_bus_words = util.flatten([ 
-    #    list(set(util.words_from_name(p[0])))
-    #    for p in bus_def.all_ports 
-    #])
-    #_, max_bus_freq = Counter(all_bus_words).most_common(1)[0]
+    get port words that appear in *all* ports
+    """
     all_port_words = util.flatten([
         list(set(util.words_from_name(p[0])))
         for p in ports
@@ -237,7 +235,14 @@ def get_cost_funcs(ports, bus_def):
     for w, cnt in Counter(all_port_words).most_common():
         if cnt == len(ports):
             dup_words.add(w)
+    return dup_words
 
+def get_cost_funcs(ports, bus_def):
+    """
+    determine cost functions in a closure with access to bus_def
+    """ 
+
+    dup_words = get_dup_words(ports)
     def match_cost_func(phy_port, bus_port):
 
         p_words = set(util.words_from_name(phy_port[0])) - dup_words
