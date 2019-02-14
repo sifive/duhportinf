@@ -221,6 +221,12 @@ def main():
         help='output path to busprop.json with proposed bus mappings for select groups of ports',
     )
     parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='dump debug format',
+    
+    )
+    parser.add_argument(
         'component_json5',
         help='input component.json5 with port list of top-level module',
     
@@ -258,6 +264,7 @@ def main():
         args.output,
         args.component_json5,
         pg_bus_mappings,
+        args.debug,
     )
 
 if __name__ == '__main__':

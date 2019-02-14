@@ -3,6 +3,7 @@ from _ctypes import PyObj_FromPtr
 import json
 import json5
 import re
+import numpy as np
 
 def format_ports(in_ports):
     """
@@ -25,7 +26,7 @@ def words_from_name(name):
     # always return lower case so case insensitive
     name = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
     ## insert '_' in between names and numbers
-    #name = re.sub('([a-zA-Z])([0-9]+)', r'\1_\2', name).lower()
+    name = re.sub('([a-zA-Z])([0-9]+)', r'\1_\2', name).lower()
     words = name.split('_')
     return words
 
@@ -214,7 +215,7 @@ def dump_json_bus_candidates(
                 'busType': bm.bus_def.abstract_type,
                 'abstractionTypes': [{
                     'viewRef': 'RTLview',
-                    'portMaps': portmap_o if not debug else debug_port_map_o,
+                    'portMaps': portmap_o if not debug else debug_portmap_o,
                 }], 
             }
             pg_busints.append((busint_name, o))

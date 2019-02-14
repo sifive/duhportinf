@@ -1,5 +1,4 @@
 from duhportinf.main import (
-    get_ports_from_json5,
     get_bus_defs,
     get_bus_matches,
     load_bus_defs,
