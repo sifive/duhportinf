@@ -69,53 +69,12 @@ class PortGrouper(object):
         ))
 
     def get_initial_port_groups(self):
-        """
-        Yield port groups for non-leaf nodes of the hierarchical
-        clustering tree using node distances to intelligently choose
-        initial port groups to expose
-
-        Modified from ClusterNode.pre_order() src to yield at non-leaf
-        nodes
-        """
-        # first obtain node ids correpsonding to initial port groups to
-        # yield based off of distances in hierarchical clustering tree
-        init_node_ids = self._get_init_node_ids()
-
-        # Do a preorder traversal, caching the result. To avoid having to do
-        # recursion, we'll store the previous index we've visited in a vector.
-        node = self.root_node
-        n = self.root_node.count
-        
-        curNode = [None] * (2 * n)
-        lvisited = set()
-        rvisited = set()
-        curNode[0] = node
-        k = 0
-        while k >= 0:
-            nd = curNode[k]
-            ndid = nd.id
-            if nd.is_leaf():
-                #yield set([self.nid_port_map[nd.id]])
-                k = k - 1
-            else:
-                if ndid not in lvisited:
-                    curNode[k + 1] = nd.left
-                    lvisited.add(ndid)
-                    k = k + 1
-                elif ndid not in rvisited:
-                    curNode[k + 1] = nd.right
-                    rvisited.add(ndid)
-                    k = k + 1
-                # If we've visited the left and right of this non-leaf
-                # node already, go up in the tree.
-                else:
-                    k = k - 1
-                    if nd.id in init_node_ids:
-                        yield nd.id, self._get_group(nd)
-        
+        init_nodes = self._get_init_nodes()
+        for node in init_nodes:
+            yield node.id, self._get_group(node)
         return
 
-    def _get_init_node_ids(self):
+    def _get_init_nodes(self):
         """
         Use relative distances in linkage tree to determine initial port
         groups to test.
@@ -123,7 +82,8 @@ class PortGrouper(object):
         Yield a particular node, and its port group, if for any port (leaf
         node) it is the maximum increase in distance.
         """
-        init_nids = set()
+        init_nodes = []
+        seen_ids = set()
         def tag_init_node_func(node):
             curr = node
             nid_costs = []
@@ -178,14 +138,16 @@ class PortGrouper(object):
                     key=lambda x: x[0],
                     reverse=True,
                 )[:2]
-                for _, opt_nid, _ in opt_nid_costs:
-                    init_nids.add(opt_nid)
+                for _, _, opt_node in opt_nid_costs:
+                    if opt_node.id not in seen_ids:
+                        init_nodes.append(opt_node)
+                    seen_ids.add(opt_node.id)
 
         # use default pre order traversal, which only executes argument
         # func at the leaves
         self.root_node.pre_order(tag_init_node_func)
         
-        return init_nids
+        return init_nodes
 
     def get_optimal_groups(self, nid_cost_map):
 
