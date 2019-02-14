@@ -49,6 +49,31 @@ class BundleRecognizer(unittest.TestCase):
         ports3.append(('ntest_bad', 1, 1))
         check_prefix(ports3, '')
 
+    def test_label_vectors(self):
+        # create two vector groups and some background ports
+        p1 = [('test_bit{}_n'.format(i), 1, 1) for i in range(2, 20)]
+        p2 = [('test_bit_sub{}_n'.format(i), 1, 1) for i in range(10)]
+        p3 = [('test2_bit_{}_n_y'.format(i), 1, 1) for i in range(5)]
+        ports = [p for pp in [p1, p2, p3] for p in pp]
+        ports.extend([
+            'testy_unrelated',
+            'unrelated1',
+            'unrelated_sub1',
+        ])
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        vector_bundles = pg.get_vectors()
+        self.assertEqual(len(vector_bundles), 3)
+        b1, b2, b3 = list(sorted(vector_bundles, key=lambda b: b.size))
+        self.assertEqual(b1.prefix, 'test2_bit_')
+        self.assertEqual(min(b1.range), 0)
+        self.assertEqual(max(b1.range), 4)
+        self.assertEqual(b2.prefix, 'test_bit_sub')
+        self.assertEqual(min(b2.range), 0)
+        self.assertEqual(max(b2.range), 9)
+        self.assertEqual(b3.prefix, 'test_bit')
+        self.assertEqual(min(b3.range), 2)
+        self.assertEqual(max(b3.range), 19)
+
 class Grouper(unittest.TestCase):
 
     def test_grouping_basic(self):

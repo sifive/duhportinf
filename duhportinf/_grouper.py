@@ -56,6 +56,8 @@ class PortGrouper(object):
         ))
         self.nid_port_map = {v.id:k for k,v in self.port_node_map.items()}
         self.leaf_ids = set(map(lambda n: n.id, leaves))
+        # label vectors
+        self._label_vectors()
         
     def _get_group(self, node):
         return set(map(
@@ -187,6 +189,9 @@ class PortGrouper(object):
 
     def get_optimal_groups(self, nid_cost_map):
 
+        def reset_optimal_func(node):
+            node.optimal = 0
+
         def count_optimal_func(node):
             curr = node
             nid_costs = []
@@ -211,6 +216,9 @@ class PortGrouper(object):
             if node.optimal > 3:
                 opt_nids.add(node.id)
 
+        # reset optimal counts
+        self.root_node.pre_order(reset_optimal_func)
+
         # use default pre order traversal, which only executes argument
         # func at the leaves
         self.root_node.pre_order(count_optimal_func)
@@ -221,6 +229,37 @@ class PortGrouper(object):
         
         return opt_nids
         
+    def get_vectors(self):
+        vector_port_groups = []
+        for node, is_vector in (
+            pre_order_n(self.root_node, lambda n: (n, n.is_vector))
+        ):
+            if is_vector:
+                vector_port_groups.append(self._get_group(node))
+        return [
+            VectorBundle(port_group) 
+            for port_group in vector_port_groups
+        ]
+
+    def _label_vectors(self):
+
+        # tag all nodes that make up a vector
+        def tag_is_vector_func(node):
+            ports = self._get_group(node)
+            bundle = get_bundle_designation(ports)
+            if type(bundle) == VectorBundle:
+                node.is_vector = True
+
+        # untag nodes in which the parent is also a vector and the node
+        # belongs to a wider vector
+        def tag_is_root_vector_func(node):
+            if node.parent and node.parent.is_vector:
+                node.is_vector = False
+        
+        pre_order_n(self.root_node, tag_is_vector_func, visit_leaf=False)
+        pre_order_n(self.root_node, tag_is_root_vector_func, visit_leaf=False)
+        return
+
 #--------------------------------------------------------------------------
 # port group designations
 #--------------------------------------------------------------------------
@@ -232,7 +271,7 @@ def get_bundle_designation(ports):
     same_width = (len(set(widths)) == 1)
     vindex_idx = VectorBundle.get_vector_index(ports)
     if same_dir and same_width and vindex_idx != -1:
-        return VectorBundle(ports, vindex_idx)
+        return VectorBundle(ports)
     elif same_dir:
         return DirectedBundle(ports)
     else:
@@ -241,8 +280,9 @@ def get_bundle_designation(ports):
 class Bundle(ABC):
 
     @property
-    def ports(self):
-        return iter(self._ports)
+    def size(self): return len(self._ports)
+    @property
+    def ports(self): return iter(self._ports)
 
     @property
     def prefix(self):
@@ -283,8 +323,11 @@ class VectorBundle(Bundle):
     def range(self):
         return range(self._min, self._max+1)
 
-    def __init__(self, ports, vindex):
+    def __init__(self, ports):
         super(self.__class__, self).__init__(ports)
+
+        vindex = self.__class__.get_vector_index(self.ports)
+
         name_words = [util.words_from_name(p[0]) for p in self.ports]
         index_words = list(zip(*name_words))[vindex]
         assert all([w.isdigit() for w in index_words])
@@ -310,6 +353,7 @@ class UndirectedBundle(Bundle):
 def set_defaults(node):
     node.parent = None
     node.optimal = 0
+    node.is_vector = False
 
 def add_parent(node, parent):
     node.parent = parent
@@ -319,41 +363,42 @@ def tag_parent(node):
         add_parent(node.get_left(), node)
         add_parent(node.get_right(), node)
 
-def pre_order_n(node, func=(lambda x: x.id)):
-        """
-        modified from ClusterNode src to invoke func at non-leaf nodes as well
-        """
-
-        # Do a preorder traversal, caching the result. To avoid having to do
-        # recursion, we'll store the previous index we've visited in a vector.
-        n = node.count
-
-        curNode = [None] * (2 * n)
-        lvisited = set()
-        rvisited = set()
-        curNode[0] = node
-        k = 0
-        preorder = []
-        while k >= 0:
-            nd = curNode[k]
-            ndid = nd.id
-            if nd.is_leaf():
+def pre_order_n(node, func=(lambda x: x.id), visit_leaf=True):
+    """
+    modified from ClusterNode src to invoke func at non-leaf nodes as well
+    """
+    
+    # Do a preorder traversal, caching the result. To avoid having to do
+    # recursion, we'll store the previous index we've visited in a vector.
+    n = node.count
+    
+    curNode = [None] * (2 * n)
+    lvisited = set()
+    rvisited = set()
+    curNode[0] = node
+    k = 0
+    preorder = []
+    while k >= 0:
+        nd = curNode[k]
+        ndid = nd.id
+        if nd.is_leaf():
+            k = k - 1
+            if visit_leaf:
+                preorder.append(func(nd))
+        else:
+            if ndid not in lvisited:
+                curNode[k + 1] = nd.left
+                lvisited.add(ndid)
+                k = k + 1
+            elif ndid not in rvisited:
+                curNode[k + 1] = nd.right
+                rvisited.add(ndid)
+                k = k + 1
+            # If we've visited the left and right of this non-leaf
+            # node already, go up in the tree.
+            else:
                 preorder.append(func(nd))
                 k = k - 1
-            else:
-                if ndid not in lvisited:
-                    curNode[k + 1] = nd.left
-                    lvisited.add(ndid)
-                    k = k + 1
-                elif ndid not in rvisited:
-                    curNode[k + 1] = nd.right
-                    rvisited.add(ndid)
-                    k = k + 1
-                # If we've visited the left and right of this non-leaf
-                # node already, go up in the tree.
-                else:
-                    preorder.append(func(nd))
-                    k = k - 1
-
-        return preorder
+    
+    return preorder
 
