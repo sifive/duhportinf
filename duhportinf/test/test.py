@@ -2,6 +2,7 @@ import os
 import unittest
 
 from .. import util
+from .. import main
 from .. import _grouper 
 from .. import _optimize 
 from ..busdef import BusDef
@@ -103,6 +104,9 @@ class BundleRecognizer(unittest.TestCase):
         
 class Grouper(unittest.TestCase):
 
+    def setUp(self):
+        self.bus_defs, self.mem_bus_defs = _load_test_bus_defs()
+
     def test_grouping_basic(self):
         port_names = [
             'axi0_ACLK',
@@ -124,7 +128,7 @@ class Grouper(unittest.TestCase):
 
         seen = set()
         port_groups = _get_init_port_groups(ports)
-        for port_group in port_groups:
+        for nid, port_group in port_groups:
             seen |= port_group
             prefix = next(iter(port_group))[0][:len('axi1')]
             # all signals in group must have same prefix
@@ -171,7 +175,7 @@ class Grouper(unittest.TestCase):
         seen_prefix = set()
 
         port_groups = _get_init_port_groups(ports)
-        for port_group in port_groups:
+        for nid, port_group in port_groups:
             seen_ports |= port_group
             pname = next(iter(port_group))[0]
             prefix = (
@@ -188,6 +192,37 @@ class Grouper(unittest.TestCase):
         self.assertTrue(ports.issubset(seen_ports))
         # must see all three full prefix groups
         self.assertEqual(len(seen_prefix), 3)
+
+    def test_filter_optimal_groups(self):
+        port_names = [
+            'clk',
+            'arst_n',
+            'f0_rsc_dat',
+            'f0_rsc_vld',
+            'f0_rsc_rdy',
+            'f1_rsc_dat',
+            'f1_rsc_vld',
+            'f1_rsc_rdy',
+            't0_rsc_dat',
+            't0_rsc_vld',
+            't0_rsc_rdy',
+            'result_rsc_dat',
+            'result_rsc_vld',
+            'result_rsc_rdy',
+        ]
+        nid_cost_map = {}
+        ports = [(name, 1, 1) for name in port_names]
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        for nid, port_group in pg.get_initial_port_groups():
+            # for each port group, only pair the 5 bus defs with the lowest fcost
+            pg_bus_defs = main._get_lfcost_bus_defs(port_group, self.bus_defs)[:5]
+            l_fcost = pg_bus_defs[0][0]
+            nid_cost_map[nid] = l_fcost
+        optimal_nids = pg.get_optimal_groups(nid_cost_map)
+        self.assertTrue(len(optimal_nids) > 0)
+
+    def tearDown(self):
+        pass
 
 class Fcost(unittest.TestCase):
 
@@ -322,8 +357,7 @@ class BusMapping(unittest.TestCase):
 #--------------------------------------------------------------------------
 def _get_init_port_groups(ports):
     pg, _, _ = _grouper.get_port_grouper(ports)
-    port_groups = [port_group for _, port_group in pg.get_initial_port_groups()]
-    return port_groups
+    return list(pg.get_initial_port_groups())
 
 # quick function to shrink full mappings to smaller ones for test bus defs
 def _filt_inputs(input_mappings, bus_defs):

@@ -230,10 +230,12 @@ class PortGrouper(object):
                 opt_node.optimal += 1
 
 
-        opt_nids = set()
-        def tag_optimal_func(node):
-            if node.optimal > 3:
-                opt_nids.add(node.id)
+        def get_tag_func(threshold):
+            opt_nids = set()
+            def tag_optimal_func(node):
+                if node.optimal > threshold:
+                    opt_nids.add(node.id)
+            return tag_optimal_func, opt_nids
 
         # reset optimal counts
         self.root_node.pre_order(reset_optimal_func)
@@ -244,22 +246,20 @@ class PortGrouper(object):
 
         # use helper  pre order traversal to tag non-leaf nodes that have
         # a high optimal count
-        pre_order_n(self.root_node, tag_optimal_func)
-        
+        # NOTE try obtaining nodes that are optimal for a minimum number
+        # of leaf nodes, reduce this threshold iteratively if none are
+        # found
+        opt_nids = None
+        for threshold in reversed(range(4)):
+            tag_optimal_func, opt_nids = get_tag_func(threshold)
+            pre_order_n(self.root_node, tag_optimal_func)
+            if len(opt_nids) > 0:
+                break
+        # cannot return 0 nodes as optimal
+        assert len(opt_nids) > 0
+
         return opt_nids
         
-    def get_vectors(self):
-        vector_port_groups = []
-        for node, is_vector in (
-            pre_order_n(self.root_node, lambda n: (n, n.is_vector))
-        ):
-            if is_vector:
-                vector_port_groups.append(self._get_group(node))
-        return [
-            VectorBundle(port_group) 
-            for port_group in vector_port_groups
-        ]
-
     def _label_vector_nodes(self):
 
         # tag all nodes that make up a vector
