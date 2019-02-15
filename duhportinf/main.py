@@ -73,14 +73,11 @@ def _get_bus_pairings(pg, bus_defs):
     # different groups based on fcost
     optimal_nids = pg.get_optimal_groups(nid_cost_map)
     opt_pg_bus_pairings = list(sorted(filter(
-        lambda x : (
-            # must be on an optimal path for some port
-            x[0] in optimal_nids and
-            # at least 4 ports in a group
-            len(x[2]) > 3
-        ),
+        # must be on an optimal path for some port
+        lambda x : x[0] in optimal_nids,
         pg_bus_pairings,
     ), key=lambda x: x[1]))
+    #print('optimal_nids', len(optimal_nids))
     #print('initial pg_bus_pairings', len(pg_bus_pairings))
     #print('opt pg_bus_pairings', len(opt_pg_bus_pairings))
 
