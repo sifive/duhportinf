@@ -5,6 +5,7 @@ from .. import util
 from .. import _grouper 
 from .. import _optimize 
 from ..busdef import BusDef
+from .. import _interface
 
 class BundleRecognizer(unittest.TestCase):
 
@@ -49,21 +50,47 @@ class BundleRecognizer(unittest.TestCase):
         ports3.append(('ntest_bad', 1, 1))
         check_prefix(ports3, '')
 
-    def test_label_vectors(self):
-        # create two vector groups and some background ports
+    def test_label_vector(self):
+        ports = [('test_bit{}_n'.format(i), 1, 1) for i in range(2, 20)]
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        interfaces = list([inter for _, inter in pg.get_initial_interfaces()])
+        self.assertEqual(len(interfaces), 1)
+        interface = next(iter(interfaces))
+        bundles = list(interface.bundles)
+        self.assertEqual(len(bundles), 1)
+        bundle = next(iter(bundles))
+        self.assertEqual(type(bundle), _interface.VectorBundle)
+
+    def test_label_multiple_vectors(self):
+        # create three vector groups and some background ports, which
+        # should *not* be zipped into structs
         p1 = [('test_bit{}_n'.format(i), 1, 1) for i in range(2, 20)]
         p2 = [('test_bit_sub{}_n'.format(i), 1, 1) for i in range(10)]
         p3 = [('test2_bit_{}_n_y'.format(i), 1, 1) for i in range(5)]
         ports = [p for pp in [p1, p2, p3] for p in pp]
-        ports.extend([
+        ports.extend([(name, 1, 1) for name in [
             'testy_unrelated',
             'unrelated1',
             'unrelated_sub1',
-        ])
+        ]])
         pg, _, _ = _grouper.get_port_grouper(ports)
-        vector_bundles = pg.get_vectors()
-        self.assertEqual(len(vector_bundles), 3)
-        b1, b2, b3 = list(sorted(vector_bundles, key=lambda b: b.size))
+
+        vbundles = []
+        wide_interfaces = [
+            inter 
+            for _, inter in pg.get_initial_interfaces() 
+                if len(list(inter.bundles)) == 3
+        ]
+        self.assertEqual(len(wide_interfaces), 1)
+        root_interface = next(iter(wide_interfaces))
+        vbundles = list(filter(
+            lambda b: type(b) == _interface.VectorBundle, 
+            root_interface.bundles,
+        ))
+        # all three vectors must appear in their own designated interface
+        # as a vector bundle
+        self.assertEqual(len(vbundles), 3)
+        b1, b2, b3 = sorted(vbundles, key=lambda b: b.size)
         self.assertEqual(b1.prefix, 'test2_bit_')
         self.assertEqual(min(b1.range), 0)
         self.assertEqual(max(b1.range), 4)
@@ -73,7 +100,7 @@ class BundleRecognizer(unittest.TestCase):
         self.assertEqual(b3.prefix, 'test_bit')
         self.assertEqual(min(b3.range), 2)
         self.assertEqual(max(b3.range), 19)
-
+        
 class Grouper(unittest.TestCase):
 
     def test_grouping_basic(self):

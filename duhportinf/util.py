@@ -37,6 +37,22 @@ def is_range(digits):
     assert all([type(d) == int for d in digits])
     return tuple(sorted(digits)) == tuple(range(min(digits), max(digits)+1))
 
+def sorted_equal(i1, i2):
+    return tuple(sorted(i1)) == tuple(sorted(i2))
+
+def equal_ranges(ranges):
+    r0 = ranges[0]
+    return all([sorted_equal(r0.range, r.range) for r in ranges[1:]])
+
+def common_prefix(words):
+    "Given a list of names, returns the longest common leading component"
+    n1 = min(words)
+    n2 = max(words)
+    for i, c in enumerate(n1):
+        if c != n2[i]:
+            return n1[:i] 
+    return n1
+
 def get_tokens(n):
     """all pairs and triples within a string or iterable of strings"""
     if type(n) in [list, set, tuple]:

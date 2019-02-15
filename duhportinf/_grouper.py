@@ -1,9 +1,15 @@
-from abc import ABC
 import numpy as np
 from scipy.cluster.hierarchy import linkage, to_tree
 from scipy.spatial.distance import pdist
 from ._vectorizer import Vectorizer
 from . import util
+from ._interface import (
+    Interface,
+    UndirectedBundle,
+    DirectedBundle,
+    VectorBundle,
+    get_bundle_designation,
+)
 
 def get_port_grouper(ports):
     wire_names = [p[0] for p in ports]
@@ -57,17 +63,54 @@ class PortGrouper(object):
         self.nid_port_map = {v.id:k for k,v in self.port_node_map.items()}
         self.leaf_ids = set(map(lambda n: n.id, leaves))
         # label vectors
-        self._label_vectors()
+        (
+            self.vector_root_ids,
+            self.vector_leaf_ids,
+            self.vector_nid_ports_map,
+        ) = self._label_vector_nodes()
         
+    def _get_group_interface(self, node):
+        """
+        obtain an Interface for all ports that are children of this node:
+        this will separate ports that form vectors from ones that do not
+        """
+        nids = set(pre_order_n(node, lambda n: n.id))
+        # obtain all groups of ports that form vectors
+        vnids = nids & self.vector_root_ids
+        vector_port_groups = [
+            self.vector_nid_ports_map[vnid]
+            for vnid in vnids
+        ]
+        bundles = [
+            VectorBundle(port_group)
+            for port_group in vector_port_groups
+        ]
+
+        # obtain rest of ports that do not belong to a vector
+        rest_leaf_ids = (nids & self.leaf_ids) - self.vector_leaf_ids
+        if len(rest_leaf_ids) > 0:
+            rest_ports = [self.nid_port_map[nid] for nid in rest_leaf_ids]
+            rest_bundle = get_bundle_designation(rest_ports)
+            bundles.append(rest_bundle)
+
+        return Interface(bundles)
+
     def _get_group(self, node):
+        """
+        obtain all ports that are children of this node
+        """
         return set(map(
             lambda nid: self.nid_port_map[nid],
-            filter(
-                lambda nid: nid in self.leaf_ids,
-                node.pre_order(lambda n:n.id),
-            ),
+            (self.leaf_ids & set(node.pre_order(lambda n:n.id))),
         ))
 
+    def get_initial_interfaces(self):
+        init_nodes = self._get_init_nodes()
+        for node in init_nodes:
+            yield node.id, self._get_group_interface(node)
+        return
+
+    # FIXME this should eventually not be used anymore
     def get_initial_port_groups(self):
         init_nodes = self._get_init_nodes()
         for node in init_nodes:
@@ -88,12 +131,21 @@ class PortGrouper(object):
             curr = node
             nid_costs = []
 
+            is_vector = []
             while curr.parent is not None:
                 cost = curr.parent.dist - curr.dist
                 # exclude singletons, which have the largest distance from self
                 if not curr.is_leaf():
                     nid_costs.append((cost, curr.id, curr))
+                    is_vector.append(curr.is_vector)
                 curr = curr.parent
+
+            vindexes = [i for i, is_v in enumerate(is_vector) if is_v]
+            # a node should only be part of a vector once! 
+            assert len(vindexes) <= 1
+            # never return children of a vector
+            vidx = next(iter(vindexes), 0)
+            nid_costs = nid_costs[vidx:]
 
             # FIXME remove debug
             #dport = ('axi0_AWLEN', 8, 1)
@@ -142,6 +194,11 @@ class PortGrouper(object):
                     if opt_node.id not in seen_ids:
                         init_nodes.append(opt_node)
                     seen_ids.add(opt_node.id)
+
+        # special case if root node is a vector.  in this case, it is the only
+        # initial node to return
+        if self.root_node.is_vector:
+            return [self.root_node]
 
         # use default pre order traversal, which only executes argument
         # func at the leaves
@@ -203,7 +260,7 @@ class PortGrouper(object):
             for port_group in vector_port_groups
         ]
 
-    def _label_vectors(self):
+    def _label_vector_nodes(self):
 
         # tag all nodes that make up a vector
         def tag_is_vector_func(node):
@@ -214,100 +271,25 @@ class PortGrouper(object):
 
         # untag nodes in which the parent is also a vector and the node
         # belongs to a wider vector
+        vector_root_ids = set()
+        vector_leaf_ids = set()
+        vector_nid_ports_map = {}
         def tag_is_root_vector_func(node):
             if node.parent and node.parent.is_vector:
                 node.is_vector = False
+            elif node.is_vector:
+                vector_root_ids.add(node.id)
+                for nid in node.pre_order(lambda n: n.id):
+                    vector_leaf_ids.add(nid)
+                vector_nid_ports_map[node.id] = self._get_group(node)
         
         pre_order_n(self.root_node, tag_is_vector_func, visit_leaf=False)
         pre_order_n(self.root_node, tag_is_root_vector_func, visit_leaf=False)
-        return
-
-#--------------------------------------------------------------------------
-# port group designations
-#--------------------------------------------------------------------------
-def get_bundle_designation(ports):
-    names  = [p[0] for p in ports]
-    widths = [p[1] for p in ports]
-    dirs   = [p[2] for p in ports]
-    same_dir = (len(set(dirs)) == 1)
-    same_width = (len(set(widths)) == 1)
-    vindex_idx = VectorBundle.get_vector_index(ports)
-    if same_dir and same_width and vindex_idx != -1:
-        return VectorBundle(ports)
-    elif same_dir:
-        return DirectedBundle(ports)
-    else:
-        return UndirectedBundle(ports)
-
-class Bundle(ABC):
-
-    @property
-    def size(self): return len(self._ports)
-    @property
-    def ports(self): return iter(self._ports)
-
-    @property
-    def prefix(self):
-        "Given a list of names, returns the longest common leading component"
-        port_names = [p[0] for p in self.ports]
-        n1 = min(port_names)
-        n2 = max(port_names)
-        for i, c in enumerate(n1):
-            if c != n2[i]:
-                return n1[:i] 
-        return n1
-
-    def __init__(self, ports):
-        assert len(ports) > 1
-        self._ports = ports
-
-class VectorBundle(Bundle):
-
-    @classmethod
-    def get_vector_index(cls, ports):
-        name_words = [util.words_from_name(p[0]) for p in ports]
-        diff_idxs = [
-            (i, word_group)
-            for i, word_group in enumerate(zip(*name_words))
-                if len(set(word_group)) > 1
-        ]
-        if len(diff_idxs) != 1:
-            return -1
-        # check all words in group are digits and form a range
-        idx, word_group = diff_idxs[0]
-        all_digits = all([w.isdigit() for w in word_group])
-        if not all_digits:
-            return -1
-        indexes = [int(w) for w in word_group]
-        return idx if util.is_range(indexes) else -1
-
-    @property
-    def range(self):
-        return range(self._min, self._max+1)
-
-    def __init__(self, ports):
-        super(self.__class__, self).__init__(ports)
-
-        vindex = self.__class__.get_vector_index(self.ports)
-
-        name_words = [util.words_from_name(p[0]) for p in self.ports]
-        index_words = list(zip(*name_words))[vindex]
-        assert all([w.isdigit() for w in index_words])
-        indexes = [int(w) for w in index_words]
-        assert util.is_range(indexes)
-        self._min = min(indexes)
-        self._max = max(indexes)
-
-class DirectedBundle(Bundle):
-    def __init__(self, ports):
-        super(self.__class__, self).__init__(ports)
-        dirs = [p[2] for p in self.ports]
-        same_dir = (len(set(dirs)) == 1)
-        assert same_dir
-
-class UndirectedBundle(Bundle):
-    def __init__(self, ports):
-        super(self.__class__, self).__init__(ports)
+        return (
+            vector_root_ids,
+            vector_leaf_ids,
+            vector_nid_ports_map,
+        )
 
 #--------------------------------------------------------------------------
 # ClusterNode helpers
