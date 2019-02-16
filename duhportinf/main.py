@@ -42,10 +42,10 @@ def load_bus_defs(rootdir):
     return bus_defs
 
 
-def _get_lfcost_bus_defs(port_group, bus_defs, penalize_umap=True):
+def _get_lfcost_bus_defs(interface, bus_defs, penalize_umap=True):
     return list(sorted(
         [(
-            get_mapping_fcost(port_group, bus_def, penalize_umap), 
+            get_mapping_fcost(interface, bus_def, penalize_umap), 
             bus_def,
         ) for bus_def in bus_defs],
         key=lambda x:x[0].value,
@@ -56,14 +56,14 @@ def _get_bus_pairings(pg, bus_defs):
     # potential bus pairings to optimize
     # NOTE need to keep track of node id in port group tree to pass back
     # costs and figure out optimal port groupings to expose
-    pg_bus_pairings = []
+    i_bus_pairings = []
     nid_cost_map = {}
 
-    for nid, port_group in pg.get_initial_port_groups():
+    for nid, interface in pg.get_initial_interfaces():
         # for each port group, only pair the 5 bus defs with the lowest fcost
-        pg_bus_defs = _get_lfcost_bus_defs(port_group, bus_defs)[:5]
-        l_fcost = pg_bus_defs[0][0]
-        pg_bus_pairings.append((nid, l_fcost, port_group, pg_bus_defs))
+        i_bus_defs = _get_lfcost_bus_defs(interface, bus_defs)[:5]
+        l_fcost = i_bus_defs[0][0]
+        i_bus_pairings.append((nid, l_fcost, interface, i_bus_defs))
         nid_cost_map[nid] = l_fcost
     
     # prune port groups in which the lowest fcost is too high to warrant
@@ -72,34 +72,31 @@ def _get_bus_pairings(pg, bus_defs):
     # ports in that group potentially have a better assignment within
     # different groups based on fcost
     optimal_nids = pg.get_optimal_groups(nid_cost_map)
-    opt_pg_bus_pairings = list(sorted(filter(
+    opt_i_bus_pairings = list(sorted(filter(
         # must be on an optimal path for some port
         lambda x : x[0] in optimal_nids,
-        pg_bus_pairings,
+        i_bus_pairings,
     ), key=lambda x: x[1]))
     #print('optimal_nids', len(optimal_nids))
-    #print('initial pg_bus_pairings', len(pg_bus_pairings))
-    #print('opt pg_bus_pairings', len(opt_pg_bus_pairings))
+    #print('initial i_bus_pairings', len(i_bus_pairings))
+    #print('opt i_bus_pairings', len(opt_i_bus_pairings))
 
-    return opt_pg_bus_pairings
+    return opt_i_bus_pairings
     
-def _get_initial_bus_matches(pg, pg_bus_pairings):
+def _get_initial_bus_matches(pg, i_bus_pairings):
     
     # perform bus mappings for chosen subset to determine lowest cost bus
     # mapping for each port group
-    pg_bus_mappings = []
+    i_bus_mappings = []
     nid_cost_map = {}
-    ptot = sum([len(bd) for _, _, _, bd in pg_bus_pairings])
+    ptot = sum([len(bd) for _, _, _, bd in i_bus_pairings])
     plen = min(ptot, 50)
     pcurr = 0
     util.progress_bar(pcurr, ptot, length=plen)
-    for i, (nid, l_fcost, port_group, bus_defs) in enumerate(pg_bus_pairings):
-        #print('pairing: {}, lcost:{}, port group size: {}'.format(
-        #    i, l_fcost, len(port_group)))
-        #print('      ', list(sorted(port_group))[:5])
+    for i, (nid, l_fcost, interface, bus_defs) in enumerate(i_bus_pairings):
         bus_mappings = []
         for fcost, bus_def in bus_defs:
-            bm = map_ports_to_bus(port_group, bus_def)
+            bm = map_ports_to_bus(interface, bus_def)
             bm.fcost = fcost
             bus_mappings.append(bm)
             util.progress_bar(pcurr+1, ptot, length=plen)
@@ -109,32 +106,39 @@ def _get_initial_bus_matches(pg, pg_bus_pairings):
         lcost = bus_mappings[0].cost
         nid_cost_map[nid] = lcost
     
-        pg_bus_mappings.append((
+        i_bus_mappings.append((
             nid,
             lcost,
-            port_group,
+            interface,
             bus_mappings,
         ))
 
     # choose optimal port groups to expose to the user
     optimal_nids = pg.get_optimal_groups(nid_cost_map)
-    opt_pg_bus_mappings = list(sorted(filter(
+    opt_i_bus_mappings = list(sorted(filter(
         lambda x : x[0] in optimal_nids,
-        pg_bus_mappings,
+        i_bus_mappings,
     ), key=lambda x: x[1]))
-    return opt_pg_bus_mappings
+    return opt_i_bus_mappings
 
-def _map_residual(port_group, _src_bm, bus_defs):
+def _map_residual(interface, _src_bm, bus_defs):
     """
     map flat port group against bus_defs and assign sideband signals
     optimally amongst the new bus_mappings and the input src bus mapping
+
     NOTE not used right now
+    NOTE residual must be in the form of Interface (presumeably with some
+    ports removed from the source)
     """
     src_bm = BusMapping.duplicate(_src_bm)
-    pg_bus_defs = duhportinf.main._get_lfcost_bus_defs(port_group, bus_defs, penalize_umap=False)[:30]
+    i_bus_defs = _get_lfcost_bus_defs(
+        interface,
+        bus_defs,
+        penalize_umap=False,
+    )[:30]
     bus_mappings = list(sorted([
-        duhportinf._optimize.map_ports_to_bus(port_group, bus_def, penalize_umap=False) 
-        for fcost, bus_def in pg_bus_defs
+        map_ports_to_bus(interface, bus_def, penalize_umap=False) 
+        for fcost, bus_def in i_bus_defs
     ], key=lambda bm: bm.cost))
     
     # greedily accept new bus mappings in which bus_def.req_ports have not
@@ -164,16 +168,17 @@ def _map_residual(port_group, _src_bm, bus_defs):
     # if none of the selected bus mappings map it is a primary port, pick
     # the sideband mapping with the lowest cost
     port_bmcosts = defaultdict(list)
-    for port in port_group:
+    mapping_ports = interface.get_ports_to_map()
+    for port in mapping_ports:
         port_bmcosts[port].append(
             (get_port_cost(port, src_bm), src_bm)
         )
     for bm in sel_bus_mappings:
-        for port in port_group:
+        for port in mapping_ports:
             port_bmcosts[port].append(
                 (get_port_cost(port, bm), bm)
             )
-    for port in port_group:
+    for port in mapping_ports:
         _, sel_bm = min(port_bmcosts[port], key=lambda x: x[0])
         # remove port from sideband designation in the rest of the bus mappings
         for bm in sel_bus_mappings:
@@ -191,15 +196,15 @@ def get_bus_matches(ports, bus_defs):
     print('  - done')
 
     print('initial bus pairing with port groups')
-    opt_pg_bus_pairings = _get_bus_pairings(pg, bus_defs)
+    opt_i_bus_pairings = _get_bus_pairings(pg, bus_defs)
     print('  - done')
     
     print('bus mapping')
-    opt_pg_bus_mappings = _get_initial_bus_matches(pg, opt_pg_bus_pairings)
+    opt_i_bus_mappings = _get_initial_bus_matches(pg, opt_i_bus_pairings)
     print('  - done')
 
-    # return pairings of <port_group, bus_mapping>
-    return list(map(lambda x: x[2:], opt_pg_bus_mappings))
+    # return pairings of <interface, bus_mapping>
+    return list(map(lambda x: x[2:], opt_i_bus_mappings))
 
 #--------------------------------------------------------------------------
 # main
@@ -256,11 +261,11 @@ def main():
         block = json5.load(fin)
     all_ports = util.format_ports(block['definitions']['ports'])
     bus_defs = load_bus_defs(duh_bus_path)
-    pg_bus_mappings = get_bus_matches(all_ports, bus_defs)
+    i_bus_mappings = get_bus_matches(all_ports, bus_defs)
     util.dump_json_bus_candidates(
         args.output,
         args.component_json5,
-        pg_bus_mappings,
+        i_bus_mappings,
         args.debug,
     )
 

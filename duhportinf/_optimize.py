@@ -10,12 +10,14 @@ from . import util
 solvers.options['show_progress'] = False
 solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
-def _get_name_fcost(ports, bus_def):
-    dup_words = get_dup_words(ports)
+def _get_name_fcost(interface, bus_def):
+    dup_words = get_dup_words(interface.ports)
     # get tokens for all port names (less duplicate words appearing in all
     # signals) and bus def logical names and return jaccard distance as a
     # measure of compatibility
-    p_words = set(util.flatten([util.words_from_name(p[0]) for p in ports]))
+    p_words = set(util.flatten(
+        [util.words_from_name(p[0]) for p in interface.ports]
+    ))
     p_words -= dup_words
     b_words = set(util.flatten([
         bus_def.words_from_name(p[0])
@@ -23,7 +25,7 @@ def _get_name_fcost(ports, bus_def):
     ]))
     return util.get_jaccard_dist(p_words, b_words)
 
-def get_mapping_fcost(ports, bus_def, penalize_umap=True):
+def get_mapping_fcost(interface, bus_def, penalize_umap=True):
     """
     coarse cost function to cheaply estimate how good a potential mapping
     will be
@@ -31,6 +33,8 @@ def get_mapping_fcost(ports, bus_def, penalize_umap=True):
     def sum_across(keys, cnts):
         return sum([cnts[k] for k in keys])
 
+    # collapse vectors
+    ports = interface.get_ports_to_map()
     # strip name and just match based off of width+direction
     phy_port_cnts = Counter(map(lambda x: tuple(x[1:]), ports))
     bus_req_port_cnts = Counter(map(lambda x: tuple(x[1:]), bus_def.req_ports))
@@ -97,20 +101,21 @@ def get_mapping_fcost(ports, bus_def, penalize_umap=True):
             cost += MatchCost(0,1,1)*ppc
 
     # determine name compatibility
-    name_cost = _get_name_fcost(ports, bus_def)
+    name_cost = _get_name_fcost(interface, bus_def)
     cost.nc = name_cost*len(ports)
 
     return cost
 
-def map_ports_to_bus(ports, bus_def, penalize_umap=True):
+def map_ports_to_bus(interface, bus_def, penalize_umap=True):
     """
-    optimally map ports to bus definition {req, opt} ports by formulating
-    as a convex LP and solving
+    optimally map interface ports to bus definition {req, opt} ports by
+    formulating as a convex LP and solving
     """
     # get cost functions from closure, which takes into account specifics of
     # bus_def
-    match_cost_func, mapping_cost_func = get_cost_funcs(ports, bus_def)
+    match_cost_func, mapping_cost_func = get_cost_funcs(interface, bus_def)
 
+    ports = interface.get_ports_to_map()
     ports1 = list(ports)
     ports2 = list(bus_def.req_ports)
     ports2.extend(bus_def.opt_ports)
@@ -227,6 +232,7 @@ def get_dup_words(ports):
     """
     get port words that appear in *all* ports
     """
+    ports = set(ports)
     all_port_words = util.flatten([
         list(set(util.words_from_name(p[0])))
         for p in ports
@@ -237,12 +243,12 @@ def get_dup_words(ports):
             dup_words.add(w)
     return dup_words
 
-def get_cost_funcs(ports, bus_def):
+def get_cost_funcs(interface, bus_def):
     """
     determine cost functions in a closure with access to bus_def
     """ 
 
-    dup_words = get_dup_words(ports)
+    dup_words = get_dup_words(interface.ports)
     def match_cost_func(phy_port, bus_port):
 
         p_words = set(util.words_from_name(phy_port[0])) - dup_words

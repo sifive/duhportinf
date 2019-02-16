@@ -166,7 +166,7 @@ class PrettyPrintEncoder(json.JSONEncoder):
 def dump_json_bus_candidates(
     output,
     component_json5,
-    pg_bus_mappings,
+    i_bus_mappings,
     debug=False,
 ):
 
@@ -180,11 +180,10 @@ def dump_json_bus_candidates(
     busint_obj_map = {}
     busint_refs = []
     busint_alt_refs = []
-    for i, (port_group, bus_mappings) in enumerate(sorted(
-        pg_bus_mappings,
-        key=lambda x: len(x[0]),
+    for i, (interface, bus_mappings) in enumerate(sorted(
+        i_bus_mappings,
+        key=lambda x: x[0].size,
         reverse=True,
-        #key=lambda x: x[1][0][0],
     )):
         pg_busints = []
         for j, bus_mapping in enumerate(bus_mappings):
@@ -242,7 +241,10 @@ def dump_json_bus_candidates(
             [ref_from_name(name) for name, o in pg_busints[1:]]
         )
         busint_obj_map.update({name:o for name, o in pg_busints})
-        pgo = ('portgroup_{}'.format(i), [NoIndent(json_format(p)) for p in sorted(port_group)])
+        pgo = (
+            'portgroup_{}'.format(i), 
+            [NoIndent(json_format(p)) for p in sorted(interface.ports)],
+        )
         portgroup_objs.append(pgo)
         
     # update input block object with mapped bus interfaces and alternates

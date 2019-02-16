@@ -163,13 +163,15 @@ class Grouper(unittest.TestCase):
         ports = set([(p, 1, 1) for p in port_names])
 
         seen = set()
-        port_groups = _get_init_port_groups(ports)
-        for nid, port_group in port_groups:
-            seen |= port_group
-            prefix = next(iter(port_group))[0][:len('axi1')]
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        for nid, inter in pg.get_initial_interfaces():
+            self.assertEqual(len(list(inter.vector_bundles)), 0)
+            self.assertEqual(len(list(inter.nonvector_bundles)), 1)
+            seen |= set(inter.ports)
+            prefix = next(iter(inter.ports))[0][:len('axi1')]
             # all signals in group must have same prefix
             self.assertTrue(
-                all([p[0].startswith(prefix) for p in port_group])
+                all([p[0].startswith(prefix) for p in inter.ports])
             )
 
         #self.assertEqual(2, len(port_groups))
@@ -210,19 +212,19 @@ class Grouper(unittest.TestCase):
         seen_ports = set()
         seen_prefix = set()
 
-        port_groups = _get_init_port_groups(ports)
-        for nid, port_group in port_groups:
-            seen_ports |= port_group
-            pname = next(iter(port_group))[0]
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        for nid, inter in pg.get_initial_interfaces():
+            seen_ports |= set(inter.ports)
+            pname = next(iter(inter.ports))[0]
             prefix = (
                 pname[:len('axi1_sub1')] 
                 if pname.startswith('axi1_sub')
                 else pname[:len('axi0')]
             )
             # a port group of the size expected must have all prefix match
-            if len(port_group) == len(port_group_map[prefix]):
+            if inter.size == len(port_group_map[prefix]):
                 self.assertTrue(
-                    all([p[0].startswith(prefix) for p in port_group])
+                    all([p[0].startswith(prefix) for p in inter.ports])
                 )
                 seen_prefix.add(prefix)
         self.assertTrue(ports.issubset(seen_ports))
@@ -249,10 +251,9 @@ class Grouper(unittest.TestCase):
         nid_cost_map = {}
         ports = [(name, 1, 1) for name in port_names]
         pg, _, _ = _grouper.get_port_grouper(ports)
-        for nid, port_group in pg.get_initial_port_groups():
+        for nid, inter in pg.get_initial_interfaces():
             # for each port group, only pair the 5 bus defs with the lowest fcost
-            pg_bus_defs = main._get_lfcost_bus_defs(port_group, self.bus_defs)[:5]
-            l_fcost = pg_bus_defs[0][0]
+            l_fcost = next(iter(main._get_lfcost_bus_defs(inter, self.bus_defs)))[0]
             nid_cost_map[nid] = l_fcost
         optimal_nids = pg.get_optimal_groups(nid_cost_map)
         self.assertTrue(len(optimal_nids) > 0)
@@ -278,6 +279,7 @@ class Fcost(unittest.TestCase):
             ('scram_rddata', None, 1),
             ('scram_rdderr', None, 1),
         ]
+        interface = _interface.Interface.get_undirected(ports)
         dpram_master_bd = next(filter(
             lambda bd: (
                 bd.abstract_type.name == 'DPRAM_rtl' and 
@@ -285,7 +287,7 @@ class Fcost(unittest.TestCase):
             ),
             self.mem_bus_defs,
         ))
-        fcost = _optimize.get_mapping_fcost(ports, dpram_master_bd)
+        fcost = _optimize.get_mapping_fcost(interface, dpram_master_bd)
         self.assertEqual(fcost.dc, 1)
         self.assertEqual(fcost.wc, 2)
 
@@ -334,9 +336,10 @@ class BusMapping(unittest.TestCase):
         ])
         axi0_ports = [pp for pp, bp in true_mappings]
         axi0_ports.extend(true_sideband_ports)
+        axi0_interface = _interface.Interface.get_undirected(axi0_ports)
 
         bus_mappings = list(sorted([
-            _optimize.map_ports_to_bus(axi0_ports, bd)
+            _optimize.map_ports_to_bus(axi0_interface, bd)
             for bd in self.bus_defs
         ], key=lambda bm: bm.cost))
         bm = bus_mappings[0]
@@ -374,9 +377,9 @@ class BusMapping(unittest.TestCase):
             (('front_port_axi4_0_b_ready', 1, 1), ('BREADY', 1, 1)),
 
         ])
-        core_ports = [pp for pp, bp in true_mappings]
+        core_interface = _interface.Interface.get_undirected([pp for pp, bp in true_mappings])
         bus_mappings = list(sorted([
-            _optimize.map_ports_to_bus(core_ports, bd)
+            _optimize.map_ports_to_bus(core_interface, bd)
             for bd in self.bus_defs
         ], key=lambda bm: bm.cost))
         bm = bus_mappings[0]
@@ -391,10 +394,6 @@ class BusMapping(unittest.TestCase):
 #--------------------------------------------------------------------------
 # helpers
 #--------------------------------------------------------------------------
-def _get_init_port_groups(ports):
-    pg, _, _ = _grouper.get_port_grouper(ports)
-    return list(pg.get_initial_port_groups())
-
 # quick function to shrink full mappings to smaller ones for test bus defs
 def _filt_inputs(input_mappings, bus_defs):
     all_bd_portnames = set([p[0] for bd in bus_defs for p in bd.all_ports])

@@ -5,6 +5,10 @@ from . import util
 
 class Interface(object):
 
+    @classmethod
+    def get_undirected(cls, ports):
+        return cls([UndirectedBundle(ports)])
+
     @property
     def size(self): return len(self._ports)
     @property
@@ -84,6 +88,16 @@ class Interface(object):
             struct_vbundle = VectorStructBundle(vbundles)
             svbundles.append(struct_vbundle)
         return svbundles
+
+    def get_ports_to_map(self):
+        ports_to_map = []
+        ports_to_map.extend(
+            util.flatten([b.ports for b in self.nonvector_bundles])
+        )
+        ports_to_map.extend(
+            [(b.prefix, b.width, b.dir) for b in self.vector_bundles]
+        )
+        return set(ports_to_map)
 
 #--------------------------------------------------------------------------
 # port group bundle designations
