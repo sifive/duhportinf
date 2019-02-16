@@ -21,7 +21,7 @@ class BundleRecognizer(unittest.TestCase):
 
         vector_ports = [('test_bit{}_n'.format(i), 1, 1) for i in range(20)]
         bundle1 = _grouper.get_bundle_designation(vector_ports)
-        self.assertEqual(type(bundle1), _grouper.VectorBundle)
+        self.assertEqual(type(bundle1), _interface.VectorBundle)
         self.assertEqual(min(bundle1.range), 0)
         self.assertEqual(max(bundle1.range), 19)
         self.assertEqual(bundle1.prefix, 'test_bit')
@@ -42,7 +42,7 @@ class BundleRecognizer(unittest.TestCase):
         # change direction of another port so designation should be
         # undirected bundle
         directed_ports2[1] = ('test_bit1_n', 2, -1)
-        check_type(directed_ports2, _grouper.UndirectedBundle)
+        check_type(directed_ports2, _interface.UndirectedBundle)
 
         # test prefixing
         ports3 = list(vector_ports)
@@ -75,8 +75,6 @@ class BundleRecognizer(unittest.TestCase):
             'unrelated_sub1',
         ]])
         pg, _, _ = _grouper.get_port_grouper(ports)
-
-        vbundles = []
         wide_interfaces = [
             inter 
             for _, inter in pg.get_initial_interfaces() 
@@ -101,6 +99,44 @@ class BundleRecognizer(unittest.TestCase):
         self.assertEqual(b3.prefix, 'test_bit')
         self.assertEqual(min(b3.range), 2)
         self.assertEqual(max(b3.range), 19)
+
+    def test_structify_vectors(self):
+        p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
+        p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
+        ports = [p for pp in [p1, p2] for p in pp]
+
+        def get_type_bundles(inter, btype):
+            return list(filter(
+                lambda b: type(b) == btype,
+                inter.bundles_structed,
+            ))
+
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        structed_interfaces = list(filter(
+            lambda inter: inter.structed_width > 0,
+            map(lambda x: x[1], pg.get_initial_interfaces()),
+        ))
+        # precisely one structed interface
+        self.assertEqual(len(structed_interfaces), 1)
+        sinter = next(iter(structed_interfaces))
+        svbundles = list(sinter.struct_bundles)
+        # with a single vector struct
+        self.assertEqual(len(svbundles), 1)
+        svbundle = next(iter(svbundles))
+        self.assertEqual(max(svbundle.range), 9)
+        self.assertEqual(min(svbundle.range), 0)
+        self.assertEqual(
+            tuple(sorted(svbundle.attributes)),
+            tuple(sorted([
+                ('test_bit_1field', 1, 1), ('test_bit_2field', 1, 1)
+            ])),
+        )
+        self.assertEqual(
+            tuple(sorted(svbundle.attributes_short)),
+            tuple(sorted([
+                ('1field', 1, 1), ('2field', 1, 1)
+            ])),
+        )
         
 class Grouper(unittest.TestCase):
 

@@ -1,13 +1,13 @@
 import numpy as np
 from scipy.cluster.hierarchy import linkage, to_tree
 from scipy.spatial.distance import pdist
+from itertools import chain
 from ._vectorizer import Vectorizer
 from . import util
 from ._interface import (
     Interface,
-    UndirectedBundle,
-    DirectedBundle,
     VectorBundle,
+    DirectedBundle,
     get_bundle_designation,
 )
 
@@ -68,33 +68,9 @@ class PortGrouper(object):
             self.vector_leaf_ids,
             self.vector_nid_ports_map,
         ) = self._label_vector_nodes()
+        # get interfaces for all non-leaf nodes
+        self.nid_interface_map = self._get_interfaces()
         
-    def _get_group_interface(self, node):
-        """
-        obtain an Interface for all ports that are children of this node:
-        this will separate ports that form vectors from ones that do not
-        """
-        nids = set(pre_order_n(node, lambda n: n.id))
-        # obtain all groups of ports that form vectors
-        vnids = nids & self.vector_root_ids
-        vector_port_groups = [
-            self.vector_nid_ports_map[vnid]
-            for vnid in vnids
-        ]
-        bundles = [
-            VectorBundle(port_group)
-            for port_group in vector_port_groups
-        ]
-
-        # obtain rest of ports that do not belong to a vector
-        rest_leaf_ids = (nids & self.leaf_ids) - self.vector_leaf_ids
-        if len(rest_leaf_ids) > 0:
-            rest_ports = [self.nid_port_map[nid] for nid in rest_leaf_ids]
-            rest_bundle = get_bundle_designation(rest_ports)
-            bundles.append(rest_bundle)
-
-        return Interface(bundles)
-
     def _get_group(self, node):
         """
         obtain all ports that are children of this node
@@ -107,27 +83,29 @@ class PortGrouper(object):
     def get_initial_interfaces(self):
         init_nodes = self._get_init_nodes()
         for node in init_nodes:
-            yield node.id, self._get_group_interface(node)
+            yield node.id, self.nid_interface_map[node.id]
         return
 
     # FIXME this should eventually not be used anymore
     def get_initial_port_groups(self):
         init_nodes = self._get_init_nodes()
         for node in init_nodes:
-            yield node.id, self._get_group(node)
+            yield node.id, set(self.nid_interface_map[node.id].ports)
         return
 
     def _get_init_nodes(self):
         """
-        Use relative distances in linkage tree to determine initial port
-        groups to test.
+        Use relative distances in linkage tree and presence of
+        vectors/structs at each node to to determine initial port
+        groups to test
 
         Yield a particular node, and its port group, if for any port (leaf
-        node) it is the maximum increase in distance.
+        node) it is the maximum increase in tree distance OR if it has the
+        maximal struct width
         """
         init_nodes = []
         seen_ids = set()
-        def tag_init_node_func(node):
+        def tag_init_node1_func(node):
             curr = node
             nid_costs = []
 
@@ -195,70 +173,44 @@ class PortGrouper(object):
                         init_nodes.append(opt_node)
                     seen_ids.add(opt_node.id)
 
+        def tag_init_node2_func(node):
+            inter = self.nid_interface_map[node.id]
+            linter = self.nid_interface_map[node.left.id]
+            rinter = self.nid_interface_map[node.right.id]
+            pinter = None if node.parent is None else (
+                self.nid_interface_map[node.parent.id]
+            )
+            if (
+                node.id not in seen_ids and
+                # this node has a struct
+                inter.structed_width > 1 and 
+                # that is wider than both children
+                (inter.structed_width > max(
+                     linter.structed_width,
+                     rinter.structed_width,
+                )) and
+                # the parent does not improve on
+                (
+                    pinter == None or 
+                    pinter.structed_width == inter.structed_width
+                )
+            ):
+                init_nodes.append(node)
+
         # special case if root node is a vector.  in this case, it is the only
         # initial node to return
         if self.root_node.is_vector:
             return [self.root_node]
 
-        # use default pre order traversal, which only executes argument
+        # tag based on linkage tree distance
+        # NOTE use default pre order traversal, which only executes argument
         # func at the leaves
-        self.root_node.pre_order(tag_init_node_func)
-        
+        self.root_node.pre_order(tag_init_node1_func)
+        # tag based on struct/vector presence
+        # NOTE use pre order traversal that executes only at non-leaves
+        pre_order_n(self.root_node, tag_init_node2_func, visit_leaf=False)
+
         return init_nodes
-
-    def get_optimal_groups(self, nid_cost_map):
-
-        def reset_optimal_func(node):
-            node.optimal = 0
-
-        def count_optimal_func(node):
-            curr = node
-            nid_costs = []
-
-            while curr is not None:
-                cost = None if curr.id not in nid_cost_map else \
-                    nid_cost_map[curr.id]
-                if cost is not None:
-                    nid_costs.append((cost, curr.id, curr))
-                curr = curr.parent
-
-            ## must be at least one node assigned a cost on the path of
-            ## every leaf
-            #assert len(nid_costs) > 0
-            if len(nid_costs) > 0:
-                _, opt_nid, opt_node = min(nid_costs, key=lambda x: x[0])
-                opt_node.optimal += 1
-
-
-        def get_tag_func(threshold):
-            opt_nids = set()
-            def tag_optimal_func(node):
-                if node.optimal > threshold:
-                    opt_nids.add(node.id)
-            return tag_optimal_func, opt_nids
-
-        # reset optimal counts
-        self.root_node.pre_order(reset_optimal_func)
-
-        # use default pre order traversal, which only executes argument
-        # func at the leaves
-        self.root_node.pre_order(count_optimal_func)
-
-        # use helper  pre order traversal to tag non-leaf nodes that have
-        # a high optimal count
-        # NOTE try obtaining nodes that are optimal for a minimum number
-        # of leaf nodes, reduce this threshold iteratively if none are
-        # found
-        opt_nids = None
-        for threshold in reversed(range(4)):
-            tag_optimal_func, opt_nids = get_tag_func(threshold)
-            pre_order_n(self.root_node, tag_optimal_func)
-            if len(opt_nids) > 0:
-                break
-        # cannot return 0 nodes as optimal
-        assert len(opt_nids) > 0
-
-        return opt_nids
         
     def _label_vector_nodes(self):
 
@@ -290,6 +242,117 @@ class PortGrouper(object):
             vector_leaf_ids,
             vector_nid_ports_map,
         )
+
+    def _get_interfaces(self):
+        nid_interface_map = {}
+        # hierarchically merge interface instances, recognizing nodes
+        # already tagged as vectors
+        def add_interface_func(node):
+            # single port interface for leaves
+            if node.is_leaf():
+                nid_interface_map[node.id] = Interface(
+                    [DirectedBundle([self.nid_port_map[node.id]])]
+                )
+                return
+
+            lnid = node.left.id
+            rnid = node.right.id
+            linter = nid_interface_map[lnid]
+            rinter = nid_interface_map[rnid]
+            lvbundles = linter.vector_bundles
+            rvbundles = rinter.vector_bundles
+            bundles = []
+            ports = self._get_group(node)
+            if node.is_vector:
+                # if this node is itself a vector, then by construction
+                # the child nodes can *not* be a vector
+                assert len(lvbundles) == 0 and len(rvbundles) == 0
+                assert node.id in self.vector_root_ids
+                vports = self.vector_nid_ports_map[node.id]
+                bundles.append(VectorBundle(vports))
+            else:
+                bundles.extend(list(chain(lvbundles, rvbundles)))
+                lnvbundles = linter.nonvector_bundles
+                rnvbundles = rinter.nonvector_bundles
+                # each interface for now can only have a single
+                # nonvector bundle
+                assert len(lnvbundles) <= 1 and len(rnvbundles) <= 1
+                rest_ports = util.flatten(
+                    [b.ports for b in chain(lnvbundles, rnvbundles)]
+                )
+                if len(rest_ports) > 0:
+                    # FIXME kind of hacky for children nodes of a vector,
+                    # which should *not* themselves be designated as a
+                    # vector
+                    rest_bundle = get_bundle_designation(rest_ports)
+                    if type(rest_bundle) == VectorBundle:
+                        rest_bundle = DirectedBundle(rest_ports)
+                    bundles.append(rest_bundle)
+
+            interface = Interface(bundles)
+            # this interface should contain the full number of ports for
+            # this node
+            assert interface.size == len(list(node.pre_order(lambda n: n.id)))
+            nid_interface_map[node.id] = interface 
+
+        # NOTE must do post order traversal as add_interface_func relies
+        # on having an interface already added for each of the children
+        pre_order_n(self.root_node, add_interface_func)
+
+        return nid_interface_map
+
+    def get_optimal_groups(self, nid_cost_map):
+
+        def reset_optimal_func(node):
+            node.optimal = 0
+
+        def count_optimal_func(node):
+            curr = node
+            nid_costs = []
+
+            while curr is not None:
+                cost = None if curr.id not in nid_cost_map else \
+                    nid_cost_map[curr.id]
+                if cost is not None:
+                    nid_costs.append((cost, curr.id, curr))
+                curr = curr.parent
+
+            ## must be at least one node assigned a cost on the path of
+            ## every leaf
+            #assert len(nid_costs) > 0
+            if len(nid_costs) > 0:
+                _, opt_nid, opt_node = min(nid_costs, key=lambda x: x[0])
+                opt_node.optimal += 1
+
+        def get_tag_func(threshold):
+            opt_nids = set()
+            def tag_optimal_func(node):
+                if node.optimal > threshold:
+                    opt_nids.add(node.id)
+            return tag_optimal_func, opt_nids
+
+        # reset optimal counts
+        self.root_node.pre_order(reset_optimal_func)
+
+        # use default pre order traversal, which only executes argument
+        # func at the leaves
+        self.root_node.pre_order(count_optimal_func)
+
+        # use helper  pre order traversal to tag non-leaf nodes that have
+        # a high optimal count
+        # NOTE try obtaining nodes that are optimal for a minimum number
+        # of leaf nodes, reduce this threshold iteratively if none are
+        # found
+        opt_nids = None
+        for threshold in reversed(range(4)):
+            tag_optimal_func, opt_nids = get_tag_func(threshold)
+            pre_order_n(self.root_node, tag_optimal_func)
+            if len(opt_nids) > 0:
+                break
+        # cannot return 0 nodes as optimal
+        assert len(opt_nids) > 0
+
+        return opt_nids
 
 #--------------------------------------------------------------------------
 # ClusterNode helpers

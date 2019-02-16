@@ -42,7 +42,7 @@ def sorted_equal(i1, i2):
 
 def equal_ranges(ranges):
     r0 = ranges[0]
-    return all([sorted_equal(r0.range, r.range) for r in ranges[1:]])
+    return all([sorted_equal(r0, r) for r in ranges[1:]])
 
 def common_prefix(words):
     "Given a list of names, returns the longest common leading component"
