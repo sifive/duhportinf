@@ -71,7 +71,7 @@ def _get_bus_pairings(pg, bus_defs):
     # NOTE don't bother trying to match a particular port group if all the
     # ports in that group potentially have a better assignment within
     # different groups based on fcost
-    optimal_nids = pg.get_optimal_groups(nid_cost_map)
+    optimal_nids = pg.get_optimal_nids(nid_cost_map)
     opt_i_bus_pairings = list(sorted(filter(
         # must be on an optimal path for some port
         lambda x : x[0] in optimal_nids,
@@ -114,7 +114,7 @@ def _get_initial_bus_matches(pg, i_bus_pairings):
         ))
 
     # choose optimal port groups to expose to the user
-    optimal_nids = pg.get_optimal_groups(nid_cost_map)
+    optimal_nids = pg.get_optimal_nids(nid_cost_map)
     opt_i_bus_mappings = list(sorted(filter(
         lambda x : x[0] in optimal_nids,
         i_bus_mappings,

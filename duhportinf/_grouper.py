@@ -86,12 +86,16 @@ class PortGrouper(object):
             yield node.id, self.nid_interface_map[node.id]
         return
 
-    # FIXME this should eventually not be used anymore
-    def get_initial_port_groups(self):
-        init_nodes = self._get_init_nodes()
-        for node in init_nodes:
-            yield node.id, set(self.nid_interface_map[node.id].ports)
-        return
+    def _get_linkage_tree_dist(self, node):
+        """
+        Determine the delta in linkage tree distance between the current
+        node and its parent
+        """
+        if node.parent is None:
+            return None
+        else:
+            cost = node.parent.dist - node.dist
+            return cost
 
     def _get_init_nodes(self):
         """
@@ -111,7 +115,7 @@ class PortGrouper(object):
 
             is_vector = []
             while curr.parent is not None:
-                cost = curr.parent.dist - curr.dist
+                cost = self._get_linkage_tree_dist(node)
                 # exclude singletons, which have the largest distance from self
                 if not curr.is_leaf():
                     nid_costs.append((cost, curr.id, curr))
@@ -208,7 +212,7 @@ class PortGrouper(object):
         self.root_node.pre_order(tag_init_node1_func)
         # tag based on struct/vector presence
         # NOTE use pre order traversal that executes only at non-leaves
-        pre_order_n(self.root_node, tag_init_node2_func, visit_leaf=False)
+        #pre_order_n(self.root_node, tag_init_node2_func, visit_leaf=False)
 
         return init_nodes
         
@@ -301,7 +305,15 @@ class PortGrouper(object):
 
         return nid_interface_map
 
-    def get_optimal_groups(self, nid_cost_map):
+    def get_optimal_nids(self, nid_cost_map, min_num_leafs=4):
+        """
+        determine the set of nodes that are low cost with respect to the
+        specified <node>: cost map.  nodes are selected if they are the
+        lowest specified cost nodes on the path between leaf and root node
+        for at least min_num_leafs.
+
+        select the set of no
+        """
 
         def reset_optimal_func(node):
             node.optimal = 0
@@ -338,13 +350,13 @@ class PortGrouper(object):
         # func at the leaves
         self.root_node.pre_order(count_optimal_func)
 
-        # use helper  pre order traversal to tag non-leaf nodes that have
+        # use helper pre order traversal to tag non-leaf nodes that have
         # a high optimal count
         # NOTE try obtaining nodes that are optimal for a minimum number
         # of leaf nodes, reduce this threshold iteratively if none are
         # found
         opt_nids = None
-        for threshold in reversed(range(4)):
+        for threshold in reversed(range(min_num_leafs)):
             tag_optimal_func, opt_nids = get_tag_func(threshold)
             pre_order_n(self.root_node, tag_optimal_func)
             if len(opt_nids) > 0:
