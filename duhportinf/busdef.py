@@ -1,5 +1,6 @@
 import numpy as np
 import json5
+import logging
 from collections import defaultdict
 from ._optimize import MatchCost
 from . import util
@@ -23,7 +24,7 @@ class BusDef(object):
             with open(spec_path) as fin:
                 spec = json5.load(fin)
         except:
-            print('Warning, could not load {} with json5 parser'.format(spec_path))
+            logging.warn('Warning, could not load {} with json5 parser'.format(spec_path))
             return False
         return 'abstractionDefinition' in spec
 
@@ -240,6 +241,5 @@ def debug_bus_mapping(bm):
         for port in sorted(umap_busports):
             debug_str += ('    - {}'.format(port))+'\n'
 
-    #print(debug_str)
     return debug_str
 

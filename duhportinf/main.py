@@ -7,6 +7,7 @@ import shutil
 import json5
 import argparse
 import subprocess
+import logging
 from .busdef import BusDef
 from ._optimize import map_ports_to_bus, get_mapping_fcost, MatchCost
 from ._grouper import get_port_grouper
@@ -29,12 +30,11 @@ def load_bus_defs(rootdir):
                 spec_paths.append(spec_path)
 
     bus_defs = []                
-    print('loading {} bus specs'.format(len(spec_paths)))
+    logging.info('loading {} bus specs'.format(len(spec_paths)))
     for spec_path in spec_paths:
-        #print('  - loading ', spec_path)
         bus_defs.extend(BusDef.bus_defs_from_spec(spec_path))                
 
-    print('  - done, loaded {} bus defs with {} required and {} optional ports '.format(
+    logging.info('  - done, loaded {} bus defs with {} required and {} optional ports '.format(
         len(bus_defs),
         sum([bd.num_req_ports for bd in bus_defs]),
         sum([bd.num_opt_ports for bd in bus_defs]),
@@ -202,17 +202,17 @@ def _map_residual(interface, _src_bm, bus_defs):
 
 
 def get_bus_matches(ports, bus_defs):
-    print('hierarchically clustering ports and selecting port groups')
+    logging.info('hierarchically clustering ports and selecting port groups')
     pg, Z, wire_names = get_port_grouper(ports)
-    print('  - done')
+    logging.info('  - done')
 
-    print('initial bus pairing with port groups')
+    logging.info('initial bus pairing with port groups')
     opt_i_bus_pairings = _get_bus_pairings(pg, bus_defs)
-    print('  - done')
+    logging.info('  - done')
     
-    print('bus mapping')
+    logging.info('bus mapping')
     opt_i_bus_mappings = _get_initial_bus_matches(pg, opt_i_bus_pairings)
-    print('  - done')
+    logging.info('  - done')
 
     # return pairings of <interface, bus_mapping>
     return list(map(lambda x: x[2:], opt_i_bus_mappings))
@@ -221,6 +221,7 @@ def get_bus_matches(ports, bus_defs):
 # main
 #--------------------------------------------------------------------------
 def main():
+    logging.basicConfig(format='%(message)s', level=logging.DEBUG)
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-b', '--duh-bus',
@@ -262,7 +263,7 @@ def main():
             assert os.path.isdir(duh_bus_path), \
                 "duh-bus not properly installed, please use -b/--duh-bus"
         else:
-            print('error: duh-bus not installed and -b/--duh-bus not specified')
+            logging.error('error: duh-bus not installed and -b/--duh-bus not specified')
             sys.exit(1)
     else:
         assert os.path.isdir(args.duh_bus), '{} not a directory'.format(args.duh_bus)

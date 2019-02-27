@@ -8,6 +8,8 @@ from .. import _optimize
 from ..busdef import BusDef
 from .. import _interface
 
+util.silent = True
+
 class BundleRecognizer(unittest.TestCase):
 
     def test_recognize_vector(self):

@@ -5,6 +5,8 @@ import json5
 import re
 import numpy as np
 
+silent = False
+
 def format_ports(in_ports):
     """
     convert input component.json5 port shorthand to
@@ -106,6 +108,9 @@ def progress_bar(
         length      - Optional  : character length of bar (Int)
         fill        - Optional  : bar fill character (Str)
     """
+    # hacky fix so not messing with stdout during test when logging is off
+    if silent:
+        return
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
