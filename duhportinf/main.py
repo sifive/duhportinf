@@ -8,7 +8,7 @@ import json5
 import argparse
 import subprocess
 from .busdef import BusDef
-from ._optimize import map_ports_to_bus, get_mapping_fcost
+from ._optimize import map_ports_to_bus, get_mapping_fcost, MatchCost
 from ._grouper import get_port_grouper
 from . import busdef
 from . import util
@@ -113,12 +113,23 @@ def _get_initial_bus_matches(pg, i_bus_pairings):
             bus_mappings,
         ))
 
-    # choose optimal port groups to expose to the user
     optimal_nids = pg.get_optimal_nids(nid_cost_map)
     opt_i_bus_mappings = list(sorted(filter(
         lambda x : x[0] in optimal_nids,
         i_bus_mappings,
     ), key=lambda x: x[1]))
+
+    # append interfaces for all ports that are not included in an
+    # interface that is mapped to a described bus interface
+    covered_nids = optimal_nids
+    for nid, interface in pg.get_remaining_interfaces(covered_nids):
+        opt_i_bus_mappings.append((
+            nid,
+            MatchCost.zero(),
+            interface, 
+            [],
+        ))
+
     return opt_i_bus_mappings
 
 def _map_residual(interface, _src_bm, bus_defs):

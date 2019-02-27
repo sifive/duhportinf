@@ -235,12 +235,14 @@ def dump_json_bus_candidates(
             }
             pg_busints.append((busint_name, o))
 
-        busint_objs.extend([o for name, o in pg_busints])
-        busint_refs.append(ref_from_name(pg_busints[0][0]))
-        busint_alt_refs.extend(
-            [ref_from_name(name) for name, o in pg_busints[1:]]
-        )
-        busint_obj_map.update({name:o for name, o in pg_busints})
+        if len(pg_busints) > 0:
+            busint_objs.extend([o for name, o in pg_busints])
+            busint_refs.append(ref_from_name(pg_busints[0][0]))
+            busint_alt_refs.extend(
+                [ref_from_name(name) for name, o in pg_busints[1:]]
+            )
+            busint_obj_map.update({name:o for name, o in pg_busints})
+
         pgo = (
             'portgroup_{}'.format(i), 
             [NoIndent(json_format(p)) for p in sorted(interface.ports)],

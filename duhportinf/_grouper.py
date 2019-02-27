@@ -62,6 +62,10 @@ class PortGrouper(object):
         ))
         self.nid_port_map = {v.id:k for k,v in self.port_node_map.items()}
         self.leaf_ids = set(map(lambda n: n.id, leaves))
+        self.nid_node_map = dict(pre_order_n(
+            self.root_node,
+            lambda n: (n.id, n),
+        ))
         # label vectors
         (
             self.vector_root_ids,
@@ -86,16 +90,77 @@ class PortGrouper(object):
             yield node.id, self.nid_interface_map[node.id]
         return
 
-    def _get_linkage_tree_dist(self, node):
+    def get_remaining_interfaces(self, covered_nids):
         """
-        Determine the delta in linkage tree distance between the current
-        node and its parent
+        Determine set of lowest common ancestor interface nodes that
+        covers the remaining leaves in the linkage tree that are not
+        covered in covered_nids.  
+
         """
-        if node.parent is None:
-            return None
-        else:
-            cost = node.parent.dist - node.dist
-            return cost
+        lca_nids = self._get_lca_uncovered_nids(covered_nids)
+        for nid in lca_nids:
+            yield nid, self.nid_interface_map[nid]
+        return
+
+    def _get_lca_uncovered_nids(self, covered_nids):
+        """
+        return nids of lca nodes in which all children are uncovered
+        """
+        #assert self._check_exclusive_nids(covered_nids)
+
+        # get the closure of all nodes under the covered_nids to determine
+        # the set of uncovered leaves
+        all_covered_nids = set(util.flatten(
+            [pre_order_n(self.nid_node_map[nid]) for nid in covered_nids]
+        ))
+        uncovered_leaf_ids = set(self.leaf_ids) - all_covered_nids
+
+        def reset_uncovered_func(node):
+            node.uncovered = None
+
+        def tag_uncovered_func(node):
+            ln = node.get_left()
+            rn = node.get_right()
+            # NOTE this assumes child nodes are labeled uncovered *before*
+            # the current node
+            assert (node.is_leaf() or None not in [ln.uncovered, rn.uncovered])
+            node.uncovered = (
+                node.id in uncovered_leaf_ids or 
+                (
+                    node.id not in all_covered_nids and
+                    ln.uncovered and
+                    rn.uncovered
+                )
+            )
+
+        lca_uncovered_nids = set()
+        def tag_lca_uncovered_func(node):
+            if node.parent and node.parent.uncovered:
+                node.uncovered = False
+            elif node.uncovered:
+                lca_uncovered_nids.add(node.id)
+
+        pre_order_n(self.root_node, reset_uncovered_func)
+        # tag all nodes in which the children are uncovered
+        pre_order_n(self.root_node, tag_uncovered_func)
+        # get the lowest common ancestor (lca) uncovered
+        pre_order_n(self.root_node, tag_lca_uncovered_func)
+
+        return lca_uncovered_nids
+
+    def _check_exclusive_nids(self, nids):
+        """
+        Return True if no specified node is a descendent of one of the
+        rest of the specified nodes
+        """
+        nodes = [self.nid_node_map[nid] for nid in nids]
+        node_leafnids = [set(node.pre_order()) for node in nodes]
+        seen_nids = set()
+        for leafnids in node_leafnids:
+            if len(leafnids & seen_nids) > 0:
+                return False
+            seen_nids |= leafnids
+        return (len(leafnids & seen_nids) == 0)
 
     def _get_init_nodes(self):
         """
@@ -103,9 +168,9 @@ class PortGrouper(object):
         vectors/structs at each node to to determine initial port
         groups to test
 
-        Yield a particular node, and its port group, if for any port (leaf
-        node) it is the maximum increase in tree distance OR if it has the
-        maximal struct width
+        Yield a particular node, if for any port (leaf node) it is the
+        maximum increase in tree distance OR if it has the maximal struct
+        width
         """
         init_nodes = []
         seen_ids = set()
@@ -215,6 +280,17 @@ class PortGrouper(object):
         #pre_order_n(self.root_node, tag_init_node2_func, visit_leaf=False)
 
         return init_nodes
+
+    def _get_linkage_tree_dist(self, node):
+        """
+        Determine the delta in linkage tree distance between the current
+        node and its parent
+        """
+        if node.parent is None:
+            return None
+        else:
+            cost = node.parent.dist - node.dist
+            return cost
         
     def _label_vector_nodes(self):
 
@@ -230,7 +306,7 @@ class PortGrouper(object):
         vector_root_ids = set()
         vector_leaf_ids = set()
         vector_nid_ports_map = {}
-        def tag_is_root_vector_func(node):
+        def tag_lca_is_vector_func(node):
             if node.parent and node.parent.is_vector:
                 node.is_vector = False
             elif node.is_vector:
@@ -240,7 +316,7 @@ class PortGrouper(object):
                 vector_nid_ports_map[node.id] = self._get_group(node)
         
         pre_order_n(self.root_node, tag_is_vector_func, visit_leaf=False)
-        pre_order_n(self.root_node, tag_is_root_vector_func, visit_leaf=False)
+        pre_order_n(self.root_node, tag_lca_is_vector_func, visit_leaf=False)
         return (
             vector_root_ids,
             vector_leaf_ids,
@@ -299,8 +375,6 @@ class PortGrouper(object):
             assert interface.size == len(list(node.pre_order(lambda n: n.id)))
             nid_interface_map[node.id] = interface 
 
-        # NOTE must do post order traversal as add_interface_func relies
-        # on having an interface already added for each of the children
         pre_order_n(self.root_node, add_interface_func)
 
         return nid_interface_map
@@ -344,7 +418,7 @@ class PortGrouper(object):
             return tag_optimal_func, opt_nids
 
         # reset optimal counts
-        self.root_node.pre_order(reset_optimal_func)
+        pre_order_n(self.root_node, reset_optimal_func)
 
         # use default pre order traversal, which only executes argument
         # func at the leaves
@@ -371,7 +445,6 @@ class PortGrouper(object):
 #--------------------------------------------------------------------------
 def set_defaults(node):
     node.parent = None
-    node.optimal = 0
     node.is_vector = False
 
 def add_parent(node, parent):
@@ -382,7 +455,11 @@ def tag_parent(node):
         add_parent(node.get_left(), node)
         add_parent(node.get_right(), node)
 
-def pre_order_n(node, func=(lambda x: x.id), visit_leaf=True):
+def pre_order_n(
+    node,
+    func=(lambda x: x.id),
+    visit_leaf=True,
+):
     """
     modified from ClusterNode src to invoke func at non-leaf nodes as well
     """

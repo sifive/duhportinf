@@ -264,6 +264,43 @@ class Grouper(unittest.TestCase):
         optimal_nids = pg.get_optimal_nids(nid_cost_map)
         self.assertTrue(len(optimal_nids) > 0)
 
+    def test_all_ports_mapped(self):
+        p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
+        p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
+        ports = [p for pp in [p1, p2] for p in pp]
+        # temporary fix so that a structed interface is yielded
+        ports.extend([
+            ('background_signal_sub1', 1, 1),
+            ('background_signal_sub2', 1, 1),
+        ])
+        dport = ('background_signal_sub1', 1, 1)
+
+        i_bus_mappings = main.get_bus_matches(ports, self.bus_defs)
+        # all ports should be in some interface
+        mapped_ports = set(util.flatten(
+            [inter.ports for inter, _ in i_bus_mappings]
+        ))
+        self.assertTrue(set(ports).issubset(mapped_ports))
+
+        # background signals should be grouped together in a single
+        # interface without any bus mappings
+        # NOTE this depends on the fact that the default threshold for a
+        # node to be tagged with optimal_nid is to have at least
+        # min_num_leafs=4 leaf nodes for which this node is optimal.
+        # there are only two background_signals leafs so this will not get
+        # selected and must be caught by _grouper.get_remaining_interfaces
+        unmatched_inters = list(filter(
+            lambda x: len(x[1]) == 0,
+            i_bus_mappings,
+        ))
+        self.assertEqual(len(unmatched_inters), 1)
+        inter = next(iter(unmatched_inters))[0]
+        self.assertEqual(inter.size, 2)
+        bs = list(inter.bundles)
+        self.assertEqual(len(bs), 1)
+        b = next(iter(bs))
+        self.assertEqual(b.prefix, 'background_signal_sub')
+
     def tearDown(self):
         pass
 
