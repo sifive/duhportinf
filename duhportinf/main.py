@@ -119,17 +119,6 @@ def _get_initial_bus_matches(pg, i_bus_pairings):
         i_bus_mappings,
     ), key=lambda x: x[1]))
 
-    # append interfaces for all ports that are not included in an
-    # interface that is mapped to a described bus interface
-    covered_nids = optimal_nids
-    for nid, interface in pg.get_remaining_interfaces(covered_nids):
-        opt_i_bus_mappings.append((
-            nid,
-            MatchCost.zero(),
-            interface, 
-            [],
-        ))
-
     return opt_i_bus_mappings
 
 def _map_residual(interface, _src_bm, bus_defs):

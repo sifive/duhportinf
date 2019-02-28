@@ -90,142 +90,17 @@ class PortGrouper(object):
             yield node.id, self.nid_interface_map[node.id]
         return
 
-    def get_remaining_interfaces(self, covered_nids):
-        """
-        Determine set of lowest common ancestor interface nodes that
-        covers the remaining leaves in the linkage tree that are not
-        covered in covered_nids.  
-        """
-        lca_nids = self._get_lca_uncovered_nids(covered_nids)
-        for nid in lca_nids:
-            yield nid, self.nid_interface_map[nid]
-        return
-
-    def get_prefixroot_interfaces(self):
-        """
-        Return the interfaces with the maximal set of ports that share a
-        common prefix. This serves as an initial first guess for which
-        ports should be grouped together in an interface
-        """
-        prefixroot_nids = self._get_prefixroot_nids()
-        for nid in prefixroot_nids:
-            yield nid, self.nid_interface_map[nid]
-        return
-
-    def _get_prefixroot_nids(self):
-        """
-        return nids of prefix root nodes
-        """
-        def reset_prefixroot_func(node):
-            node.prefixroot = None
-
-        prefixroot_nids = set()
-        def tag_prefixroot_func(node):
-            #ln = node.get_left()
-            #rn = node.get_right()
-
-            pinterface = None if node.parent is None else \
-                self.nid_interface_map[node.parent.id]
-            interface = self.nid_interface_map[node.id]
-            
-            node.prefixroot = (
-                # don't tag leaves, since they are prefixroots by nature
-                # of having unique port names
-                not node.is_leaf() and
-                # treat vectors as leaves
-                not node.is_vector and
-                # this node is *not* the root
-                node is not self.root_node and
-                (
-                    # change in prefix from the parent
-                    pinterface.prefix != interface.prefix and
-                    # change in linkage distance as well
-                    node.dist != node.parent.dist
-                )
-            )
-            if node.prefixroot:
-                prefixroot_nids.add(node.id)
-
-        pre_order_n(self.root_node, reset_prefixroot_func)
-        pre_order_n(self.root_node, tag_prefixroot_func)
-        # special case if no prefix hierarchy present
-        if len(prefixroot_nids) == 0:
-            return [self.root_node.id]
-        return prefixroot_nids
-
-    def _get_lca_uncovered_nids(self, covered_nids):
-        """
-        return nids of lca nodes in which all children are uncovered
-        """
-        #assert self._check_exclusive_nids(covered_nids)
-
-        # get the closure of all nodes under the covered_nids to determine
-        # the set of uncovered leaves
-        all_covered_nids = set(util.flatten(
-            [pre_order_n(self.nid_node_map[nid]) for nid in covered_nids]
-        ))
-        uncovered_leaf_ids = set(self.leaf_ids) - all_covered_nids
-
-        def reset_uncovered_func(node):
-            node.uncovered = None
-
-        def tag_uncovered_func(node):
-            ln = node.get_left()
-            rn = node.get_right()
-            # NOTE this assumes child nodes are labeled uncovered *before*
-            # the current node
-            assert (node.is_leaf() or None not in [ln.uncovered, rn.uncovered])
-            node.uncovered = (
-                node.id in uncovered_leaf_ids or 
-                (
-                    node.id not in all_covered_nids and
-                    ln.uncovered and
-                    rn.uncovered
-                )
-            )
-
-        lca_uncovered_nids = set()
-        def tag_lca_uncovered_func(node):
-            if node.parent and node.parent.uncovered:
-                node.uncovered = False
-            elif node.uncovered:
-                lca_uncovered_nids.add(node.id)
-
-        pre_order_n(self.root_node, reset_uncovered_func)
-        # tag all nodes in which the children are uncovered
-        pre_order_n(self.root_node, tag_uncovered_func)
-        # get the lowest common ancestor (lca) uncovered
-        pre_order_n(self.root_node, tag_lca_uncovered_func)
-
-        return lca_uncovered_nids
-
-    def _check_exclusive_nids(self, nids):
-        """
-        Return True if no specified node is a descendent of one of the
-        rest of the specified nodes
-        """
-        nodes = [self.nid_node_map[nid] for nid in nids]
-        node_leafnids = [set(node.pre_order()) for node in nodes]
-        seen_nids = set()
-        for leafnids in node_leafnids:
-            if len(leafnids & seen_nids) > 0:
-                return False
-            seen_nids |= leafnids
-        return (len(leafnids & seen_nids) == 0)
-
     def _get_init_nodes(self):
         """
-        Use relative distances in linkage tree and presence of
-        vectors/structs at each node to to determine initial port
-        groups to test
+        Use relative distances in linkage tree to determine initial port
+        groups to test.
 
         Yield a particular node, if for any port (leaf node) it is the
-        maximum increase in tree distance OR if it has the maximal struct
-        width
+        maximum increase in tree distance.
         """
         init_nodes = []
         seen_ids = set()
-        def tag_init_node1_func(node):
+        def tag_init_node_func(node):
             curr = node
             nid_costs = []
 
@@ -289,31 +164,6 @@ class PortGrouper(object):
                     if opt_node.id not in seen_ids:
                         init_nodes.append(opt_node)
                     seen_ids.add(opt_node.id)
-
-        def tag_init_node2_func(node):
-            inter = self.nid_interface_map[node.id]
-            linter = self.nid_interface_map[node.left.id]
-            rinter = self.nid_interface_map[node.right.id]
-            pinter = None if node.parent is None else (
-                self.nid_interface_map[node.parent.id]
-            )
-            if (
-                node.id not in seen_ids and
-                # this node has a struct
-                inter.structed_width > 1 and 
-                # that is wider than both children
-                (inter.structed_width > max(
-                     linter.structed_width,
-                     rinter.structed_width,
-                )) and
-                # the parent does not improve on
-                (
-                    pinter == None or 
-                    pinter.structed_width == inter.structed_width
-                )
-            ):
-                init_nodes.append(node)
-
         # special case if root node is a vector.  in this case, it is the only
         # initial node to return
         if self.root_node.is_vector:
@@ -322,10 +172,7 @@ class PortGrouper(object):
         # tag based on linkage tree distance
         # NOTE use default pre order traversal, which only executes argument
         # func at the leaves
-        self.root_node.pre_order(tag_init_node1_func)
-        # tag based on struct/vector presence
-        # NOTE use pre order traversal that executes only at non-leaves
-        #pre_order_n(self.root_node, tag_init_node2_func, visit_leaf=False)
+        self.root_node.pre_order(tag_init_node_func)
 
         return init_nodes
 

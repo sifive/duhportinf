@@ -14,9 +14,6 @@ class Interface(object):
     @property
     def ports(self): return iter(self._ports)
     @property
-    def bundles_structed(self):
-        return chain(self.nonvector_bundles, self.struct_vector_bundles)
-    @property
     def bundles(self):
         return chain(self.nonvector_bundles, self.vector_bundles)
     @property
@@ -25,16 +22,6 @@ class Interface(object):
     @property
     def nonvector_bundles(self):
         return list(self._nonvector_bundles)
-    #FIXME naming is a bit confusing
-    @property
-    def struct_bundles(self):
-        return filter(
-            lambda b: type(b) == VectorStructBundle,
-            self.struct_vector_bundles,
-        )
-    @property
-    def structed_width(self):
-        return sum([svb.num_attributes for svb in self.struct_bundles])
     @property
     def mapping_width(self):
         """
@@ -67,33 +54,6 @@ class Interface(object):
             sum([b.size for b in self.vector_bundles]) +
             sum([b.size for b in self.nonvector_bundles])
         ) == len(self._ports)
-
-        self.struct_vector_bundles = self._structify(self.vector_bundles)
-
-    def _structify(self, input_vbundles):
-        range_size_vbundles_map = defaultdict(list)
-        for b in input_vbundles:
-            range_size_vbundles_map[b.size].append(b)
-
-        svbundles = []
-        for range_size, vbundles in range_size_vbundles_map.items():
-            prefixes = [b.prefix for b in vbundles]
-            cprefix = util.common_prefix(prefixes)
-            b0 = vbundles[0]
-            if (
-                # nothing to zip
-                len(vbundles) == 1 or
-                # do not share at least a common prefix
-                len(cprefix) == 0 or
-                # do not all share the same indexing range
-                not util.equal_ranges([b.range for b in vbundles])
-            ):
-                svbundles.extend(vbundles)
-                continue
-            # zip vectors of ports into a vector of structs
-            struct_vbundle = VectorStructBundle(vbundles)
-            svbundles.append(struct_vbundle)
-        return svbundles
 
     def is_vector(self, port):
         return port in self._prefix_vbundle_map
@@ -201,37 +161,4 @@ class VectorBundle(Bundle):
         self._max = max(indexes)
         # sort ports by index
         self._ports = [p for idx, p in sorted(zip(indexes, self._ports))]
-
-class VectorStructBundle(Bundle):
-    @property
-    def range(self): return range(self._min, self._max+1)
-
-    @property
-    def prefix(self):
-        # find common prefix amongst all member vector bundles
-        return util.common_prefix([b.prefix for b in self._vbundles])
-
-    @property
-    def num_attributes(self):
-        return len(self._vbundles)
-    @property
-    def attributes(self):
-        return [(b.prefix, b.width, b.dir) for b in self._vbundles]
-
-    @property
-    def attributes_short(self):
-        def trim(prefix):
-            return prefix[len(self.prefix):]
-        return [(trim(b.prefix), b.width, b.dir) for b in self._vbundles]
-
-    def __init__(self, vbundles):
-        assert all([type(b) == VectorBundle for b in vbundles])
-        assert util.equal_ranges([b.range for b in vbundles])
-        all_ports = util.flatten([b.ports for b in vbundles])
-        super(self.__class__, self).__init__(all_ports)
-
-        self._vbundles = vbundles
-        b0 = self._vbundles[0]
-        self._min = min(b0.range)
-        self._max = max(b0.range)
 

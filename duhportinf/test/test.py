@@ -102,49 +102,51 @@ class BundleRecognizer(unittest.TestCase):
         self.assertEqual(min(b3.range), 2)
         self.assertEqual(max(b3.range), 19)
 
-    def test_structify_vectors(self):
-        p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
-        p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
-        ports = [p for pp in [p1, p2] for p in pp]
-        # temporary fix so that a structed interface is yielded
-        ports.append(('background_signal', 1, 1))
+    # FIXME structify no longer a member of duh-portinf, will be moved to
+    # duh-portbundler
+    #def test_structify_vectors(self):
+    #    p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
+    #    p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
+    #    ports = [p for pp in [p1, p2] for p in pp]
+    #    # temporary fix so that a structed interface is yielded
+    #    ports.append(('background_signal', 1, 1))
 
-        def get_type_bundles(inter, btype):
-            return list(filter(
-                lambda b: type(b) == btype,
-                inter.bundles_structed,
-            ))
+    #    def get_type_bundles(inter, btype):
+    #        return list(filter(
+    #            lambda b: type(b) == btype,
+    #            inter.bundles_structed,
+    #        ))
 
-        pg, _, _ = _grouper.get_port_grouper(ports)
-        structed_interfaces = list(filter(
-            lambda inter: inter.structed_width > 0,
-            map(lambda x: x[1], pg.get_initial_interfaces()),
-        ))
-        #for _, inter in pg.get_initial_interfaces():
-        #    print('interface ports')
-        #    for p in inter.ports:
-        #        print('  - ', p)
-        # precisely one structed interface
-        self.assertEqual(len(structed_interfaces), 1)
-        sinter = next(iter(structed_interfaces))
-        svbundles = list(sinter.struct_bundles)
-        # with a single vector struct
-        self.assertEqual(len(svbundles), 1)
-        svbundle = next(iter(svbundles))
-        self.assertEqual(max(svbundle.range), 9)
-        self.assertEqual(min(svbundle.range), 0)
-        self.assertEqual(
-            tuple(sorted(svbundle.attributes)),
-            tuple(sorted([
-                ('test_bit_1field', 1, 1), ('test_bit_2field', 1, 1)
-            ])),
-        )
-        self.assertEqual(
-            tuple(sorted(svbundle.attributes_short)),
-            tuple(sorted([
-                ('1field', 1, 1), ('2field', 1, 1)
-            ])),
-        )
+    #    pg, _, _ = _grouper.get_port_grouper(ports)
+    #    structed_interfaces = list(filter(
+    #        lambda inter: inter.structed_width > 0,
+    #        map(lambda x: x[1], pg.get_initial_interfaces()),
+    #    ))
+    #    #for _, inter in pg.get_initial_interfaces():
+    #    #    print('interface ports')
+    #    #    for p in inter.ports:
+    #    #        print('  - ', p)
+    #    # precisely one structed interface
+    #    self.assertEqual(len(structed_interfaces), 1)
+    #    sinter = next(iter(structed_interfaces))
+    #    svbundles = list(sinter.struct_bundles)
+    #    # with a single vector struct
+    #    self.assertEqual(len(svbundles), 1)
+    #    svbundle = next(iter(svbundles))
+    #    self.assertEqual(max(svbundle.range), 9)
+    #    self.assertEqual(min(svbundle.range), 0)
+    #    self.assertEqual(
+    #        tuple(sorted(svbundle.attributes)),
+    #        tuple(sorted([
+    #            ('test_bit_1field', 1, 1), ('test_bit_2field', 1, 1)
+    #        ])),
+    #    )
+    #    self.assertEqual(
+    #        tuple(sorted(svbundle.attributes_short)),
+    #        tuple(sorted([
+    #            ('1field', 1, 1), ('2field', 1, 1)
+    #        ])),
+    #    )
         
 class Grouper(unittest.TestCase):
 
@@ -266,42 +268,42 @@ class Grouper(unittest.TestCase):
         optimal_nids = pg.get_optimal_nids(nid_cost_map)
         self.assertTrue(len(optimal_nids) > 0)
 
-    def test_all_ports_mapped(self):
-        p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
-        p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
-        ports = [p for pp in [p1, p2] for p in pp]
-        # temporary fix so that a structed interface is yielded
-        ports.extend([
-            ('background_signal_sub1', 1, 1),
-            ('background_signal_sub2', 1, 1),
-        ])
-        dport = ('background_signal_sub1', 1, 1)
+    # FIXME no longer a guarantee of duh-portinf anymore
+    #def test_all_ports_mapped(self):
+    #    p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
+    #    p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
+    #    ports = [p for pp in [p1, p2] for p in pp]
+    #    ports.extend([
+    #        ('background_signal_sub1', 1, 1),
+    #        ('background_signal_sub2', 1, 1),
+    #    ])
+    #    dport = ('background_signal_sub1', 1, 1)
 
-        i_bus_mappings = main.get_bus_matches(ports, self.bus_defs)
-        # all ports should be in some interface
-        mapped_ports = set(util.flatten(
-            [inter.ports for inter, _ in i_bus_mappings]
-        ))
-        self.assertTrue(set(ports).issubset(mapped_ports))
+    #    i_bus_mappings = main.get_bus_matches(ports, self.bus_defs)
+    #    # all ports should be in some interface
+    #    mapped_ports = set(util.flatten(
+    #        [inter.ports for inter, _ in i_bus_mappings]
+    #    ))
+    #    self.assertTrue(set(ports).issubset(mapped_ports))
 
-        # background signals should be grouped together in a single
-        # interface without any bus mappings
-        # NOTE this depends on the fact that the default threshold for a
-        # node to be tagged with optimal_nid is to have at least
-        # min_num_leafs=4 leaf nodes for which this node is optimal.
-        # there are only two background_signals leafs so this will not get
-        # selected and must be caught by _grouper.get_remaining_interfaces
-        unmatched_inters = list(filter(
-            lambda x: len(x[1]) == 0,
-            i_bus_mappings,
-        ))
-        self.assertEqual(len(unmatched_inters), 1)
-        inter = next(iter(unmatched_inters))[0]
-        self.assertEqual(inter.size, 2)
-        bs = list(inter.bundles)
-        self.assertEqual(len(bs), 1)
-        b = next(iter(bs))
-        self.assertEqual(b.prefix, 'background_signal_sub')
+    #    # background signals should be grouped together in a single
+    #    # interface without any bus mappings
+    #    # NOTE this depends on the fact that the default threshold for a
+    #    # node to be tagged with optimal_nid is to have at least
+    #    # min_num_leafs=4 leaf nodes for which this node is optimal.
+    #    # there are only two background_signals leafs so this will not get
+    #    # selected and must be caught by _grouper.get_remaining_interfaces
+    #    unmatched_inters = list(filter(
+    #        lambda x: len(x[1]) == 0,
+    #        i_bus_mappings,
+    #    ))
+    #    self.assertEqual(len(unmatched_inters), 1)
+    #    inter = next(iter(unmatched_inters))[0]
+    #    self.assertEqual(inter.size, 2)
+    #    bs = list(inter.bundles)
+    #    self.assertEqual(len(bs), 1)
+    #    b = next(iter(bs))
+    #    self.assertEqual(b.prefix, 'background_signal_sub')
 
     def tearDown(self):
         pass
