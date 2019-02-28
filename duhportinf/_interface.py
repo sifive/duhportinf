@@ -35,7 +35,6 @@ class Interface(object):
     @property
     def structed_width(self):
         return sum([svb.num_attributes for svb in self.struct_bundles])
-
     @property
     def mapping_width(self):
         """
@@ -46,6 +45,10 @@ class Interface(object):
             sum([b.size for b in self.nonvector_bundles]) +
             len(list(self.vector_bundles))
         )
+    @property
+    def prefix(self):
+        prefixes = [b.prefix for b in self.bundles]
+        return util.common_prefix(prefixes)
 
     def __init__(self, bundles):
         self._ports = util.flatten([b.ports for b in bundles])
@@ -57,6 +60,9 @@ class Interface(object):
             lambda b: type(b) != VectorBundle,
             bundles,
         ))
+        self._prefix_vbundle_map = {
+            b.prefix:b for b in self._vector_bundles
+        }
         assert (
             sum([b.size for b in self.vector_bundles]) +
             sum([b.size for b in self.nonvector_bundles])
@@ -89,6 +95,14 @@ class Interface(object):
             svbundles.append(struct_vbundle)
         return svbundles
 
+    def is_vector(self, port):
+        return port in self._prefix_vbundle_map
+
+    def get_vector(self, port):
+        assert self.is_vector(port), \
+            "non-vector port {} illegally passed to get_vector()".format(port)
+        return [p[0] for p in self._prefix_vbundle_map[port].ports]
+
     def get_ports_to_map(self):
         ports_to_map = []
         ports_to_map.extend(
@@ -103,6 +117,7 @@ class Interface(object):
 # port group bundle designations
 #--------------------------------------------------------------------------
 def get_bundle_designation(ports):
+    ports = list(ports)
     names  = [p[0] for p in ports]
     widths = [p[1] for p in ports]
     dirs   = [p[2] for p in ports]
@@ -184,6 +199,8 @@ class VectorBundle(Bundle):
         assert util.is_range(indexes)
         self._min = min(indexes)
         self._max = max(indexes)
+        # sort ports by index
+        self._ports = [p for idx, p in sorted(zip(indexes, self._ports))]
 
 class VectorStructBundle(Bundle):
     @property

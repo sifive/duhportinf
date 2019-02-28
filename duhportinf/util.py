@@ -175,6 +175,11 @@ def dump_json_bus_candidates(
     debug=False,
 ):
 
+    def expand_if_vector(interface, port):
+        if interface.is_vector(port):
+            return interface.get_vector(port)
+        else:
+            return port
     def json_format(p):
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
     def ref_from_name(name):
@@ -215,6 +220,10 @@ def dump_json_bus_candidates(
             portmap_o = {}
             portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_ports})
             portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_sideband_ports})
+            # expand vectors in output
+            portmap_o = {
+                bpn : expand_if_vector(interface, ppn) for bpn, ppn in portmap_o.items()
+            }
             if len(sbm_umap) > 0:
                 portmap_o['__UMAP__'] = [p[0] for p in sbm_umap]
 

@@ -95,12 +95,63 @@ class PortGrouper(object):
         Determine set of lowest common ancestor interface nodes that
         covers the remaining leaves in the linkage tree that are not
         covered in covered_nids.  
-
         """
         lca_nids = self._get_lca_uncovered_nids(covered_nids)
         for nid in lca_nids:
             yield nid, self.nid_interface_map[nid]
         return
+
+    def get_prefixroot_interfaces(self):
+        """
+        Return the interfaces with the maximal set of ports that share a
+        common prefix. This serves as an initial first guess for which
+        ports should be grouped together in an interface
+        """
+        prefixroot_nids = self._get_prefixroot_nids()
+        for nid in prefixroot_nids:
+            yield nid, self.nid_interface_map[nid]
+        return
+
+    def _get_prefixroot_nids(self):
+        """
+        return nids of prefix root nodes
+        """
+        def reset_prefixroot_func(node):
+            node.prefixroot = None
+
+        prefixroot_nids = set()
+        def tag_prefixroot_func(node):
+            #ln = node.get_left()
+            #rn = node.get_right()
+
+            pinterface = None if node.parent is None else \
+                self.nid_interface_map[node.parent.id]
+            interface = self.nid_interface_map[node.id]
+            
+            node.prefixroot = (
+                # don't tag leaves, since they are prefixroots by nature
+                # of having unique port names
+                not node.is_leaf() and
+                # treat vectors as leaves
+                not node.is_vector and
+                # this node is *not* the root
+                node is not self.root_node and
+                (
+                    # change in prefix from the parent
+                    pinterface.prefix != interface.prefix and
+                    # change in linkage distance as well
+                    node.dist != node.parent.dist
+                )
+            )
+            if node.prefixroot:
+                prefixroot_nids.add(node.id)
+
+        pre_order_n(self.root_node, reset_prefixroot_func)
+        pre_order_n(self.root_node, tag_prefixroot_func)
+        # special case if no prefix hierarchy present
+        if len(prefixroot_nids) == 0:
+            return [self.root_node.id]
+        return prefixroot_nids
 
     def _get_lca_uncovered_nids(self, covered_nids):
         """
@@ -180,7 +231,7 @@ class PortGrouper(object):
 
             is_vector = []
             while curr.parent is not None:
-                cost = self._get_linkage_tree_dist(node)
+                cost = self._get_linkage_tree_dist(curr)
                 # exclude singletons, which have the largest distance from self
                 if not curr.is_leaf():
                     nid_costs.append((cost, curr.id, curr))
@@ -194,11 +245,8 @@ class PortGrouper(object):
             vidx = next(iter(vindexes), 0)
             nid_costs = nid_costs[vidx:]
 
-            # FIXME remove debug
-            #dport = ('axi0_AWLEN', 8, 1)
-            #dport = ('axi4_mst0_aclk', 1, 1)
-            #dport = ('nvdla_core2dbb_aw_awready', 1, 1)
-            #dport = ('pl_rxpolarity', None, -1)
+            ## FIXME remove debug
+            #dport = ("axi1_RPARITY_EN", 1, -1)
             #init_group = set(self._get_group(nid_costs[0][-1]))
             #if dport in init_group and len(init_group) < 60:
             #    prev_group = set()
