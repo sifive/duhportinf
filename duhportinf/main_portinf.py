@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import shutil
 import json5
+from jsonref import JsonRef
 import argparse
 import subprocess
 import logging
@@ -260,7 +261,8 @@ def main():
 
     with open(args.component_json5) as fin:
         block = json5.load(fin)
-    all_ports = util.format_ports(block['definitions']['ports'])
+        block = JsonRef.replace_refs(block)
+    all_ports = util.format_ports(block['component']['model']['ports'])
     bus_defs = load_bus_defs(duh_bus_path)
     i_bus_mappings = get_bus_matches(all_ports, bus_defs)
     util.dump_json_bus_candidates(

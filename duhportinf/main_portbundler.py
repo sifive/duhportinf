@@ -89,7 +89,7 @@ def main():
     with open(args.component_json5) as fin:
         block = json5.load(fin)
         block = JsonRef.replace_refs(block)
-    all_ports = util.format_ports(block['definitions']['ports'])
+    all_ports = util.format_ports(block['component']['model']['ports'])
     bus_interfaces = block['component']['busInterfaces']
     unassn_ports = _get_unassigned_ports(all_ports, bus_interfaces)
     bundles = _get_bundles_from_ports(unassn_ports)
