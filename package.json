@@ -8,7 +8,8 @@
     "install": "npm run -s gen-reqs && npm run -s install-pyreqs && pip3 install --target $PWD/pylib ."
   },
   "bin": {
-    "duh-portinf": ".npm-install/duhportinf-bin.py"
+    "duh-portinf": ".npm-install/duhportinf-bin.py",
+    "duh-portbundler": ".npm-install/duhportbundler-bin.py"
   },
   "repository": {
     "type": "git",

@@ -2,3 +2,4 @@ json5>=0.6.1
 cvxopt>=1.2.2
 scipy>=0.19.1
 numpy>=1.13.3
+jsonref>=0.2

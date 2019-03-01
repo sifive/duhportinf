@@ -13,5 +13,5 @@ assert os.path.isdir(pylib), \
 sys.path = [pylib] + sys.path
 
 import duhportinf
-duhportinf.main_portinf.main()
+duhportinf.main_portbundler.main()
 

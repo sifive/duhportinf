@@ -183,7 +183,7 @@ def dump_json_bus_candidates(
     def json_format(p):
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
     def ref_from_name(name):
-        return {'$ref': '#/busDefinitions/{}'.format(name)}
+        return {'$ref': '#/definitions/busDefinitions/{}'.format(name)}
     
     portgroup_objs = []
     busint_objs = []
@@ -287,6 +287,62 @@ def dump_json_bus_candidates(
             ('busInterfaces', busint_refs),
             ('busDefinitions', busint_objs),
         ]
+    s = json.dumps(block_obj, indent=4, cls=PrettyPrintEncoder)
+
+    if hasattr(output, 'write'):
+        _ = output.write(s)
+    else:
+        with open(output, 'w') as fout:
+            fout.write(s)
+    return
+
+def dump_json_bundles(
+    output,
+    component_json5,
+    bundles,
+    debug=False,
+):
+
+    #def expand_if_vector(interface, port):
+    #    if interface.is_vector(port):
+    #        return interface.get_vector(port)
+    #    else:
+    #        return port
+    def ref_from_name(name):
+        return {'$ref': '#/definitions/bundleDefinitions/{}'.format(name)}
+    
+    bundle_objs = []
+    bundle_refs = []
+    bundle_obj_map = {}
+    for i, bundle in enumerate(bundles): 
+        name = 'bundle_{}'.format(i)
+        o = {
+            'name': name,
+            'interfaceMode': None,
+            'busType': 'bundle',
+            'abstractionTypes': [{
+                'viewRef': 'RTLview',
+                'portMaps': bundle.tree,
+            }], 
+        }
+        bundle_objs.append(o)
+        bundle_refs.append(ref_from_name(name))
+        bundle_obj_map[name] = o
+
+    # update input block object with mapped bus interfaces and alternates
+    with open(component_json5) as fin:
+        block_obj = json5.load(fin)
+    assert 'definitions' in block_obj, \
+        'component key not defined in input block object'
+    block_obj['definitions']['bundleDefinitions'] = bundle_obj_map
+    assert 'component' in block_obj, \
+        'component key not defined in input block object'
+    comp_obj = block_obj['component']
+    bkey = 'busInterfaces' 
+    if bkey not in comp_obj:
+        comp_obj[bkey] = []
+    comp_obj[bkey].extend([NoIndent(o) for o in bundle_refs])
+
     s = json.dumps(block_obj, indent=4, cls=PrettyPrintEncoder)
 
     if hasattr(output, 'write'):

@@ -1,12 +1,15 @@
 import os
 import unittest
+import json
 
 from .. import util
-from .. import main
+from .. import main_portinf
+from .. import main_portbundler
 from .. import _grouper 
 from .. import _optimize 
 from ..busdef import BusDef
 from .. import _interface
+from .. import _bundle
 
 util.silent = True
 
@@ -148,6 +151,67 @@ class BundleRecognizer(unittest.TestCase):
     #        ])),
     #    )
         
+class Bundler(unittest.TestCase):
+
+    def setUp(self):
+        pass
+
+    def test_basic(self):
+        names = [
+            'foo',
+            'foo_bar1',
+            'foo_bar2',
+            'foo_bar3',
+            'foo_baz1',
+            'foo_baz3',
+            'background',
+        ]
+        bundle = _bundle.Bundle(names)
+        tree = bundle.tree
+        # foo.bar should be vector
+        self.assertTrue(type(tree['foo']['bar']) in [list,tuple])
+        self.assertEqual(len(tree['foo']['bar']), 3)
+        # foo.baz should be *not* be a vector
+        self.assertTrue(type(tree['foo']['baz']) == dict)
+        self.assertEqual(len(tree['foo']['baz']), 2)
+
+    def test_main_bundler(self):
+        names = [
+            'foo',
+            'foo_bar1',
+            'foo_bar2',
+            'baz_sub',
+            'baz_subby',
+            'background',
+        ]
+        ports = [(n, 1, 1) for n in names]
+
+        # main bundler should give three separate bundles for groups of ports that
+        # differ at their root word in the name
+        bundles = main_portbundler._get_bundles_from_ports(ports)
+        self.assertEqual(len(bundles), 3)
+        prefixes = [b.root_prefix for b in bundles]
+        self.assertEqual(
+            list(sorted(prefixes)),
+            ['background', 'baz', 'foo'],
+        )
+
+    def test_flatten_passthrus(self):
+        names = [
+            'foo_bar',
+            'foo_bar_long_name_1',
+            'foo_bar_longy_name_2',
+        ]
+        bundle = _bundle.Bundle(names)
+        tree = bundle.tree
+        #print(json.dumps(bundle.tree, indent=2))
+        self.assertEqual('foo_bar', tree['foo_bar']['_'])
+        self.assertEqual('foo_bar_long_name_1', tree['foo_bar']['long_name_1'])
+        self.assertEqual('foo_bar_longy_name_2', tree['foo_bar']['longy_name_2'])
+
+    def tearDown(self):
+        pass
+
 class Grouper(unittest.TestCase):
 
     def setUp(self):
@@ -263,7 +327,7 @@ class Grouper(unittest.TestCase):
         pg, _, _ = _grouper.get_port_grouper(ports)
         for nid, inter in pg.get_initial_interfaces():
             # for each port group, only pair the 5 bus defs with the lowest fcost
-            l_fcost = next(iter(main._get_lfcost_bus_defs(inter, self.bus_defs)))[0]
+            l_fcost = next(iter(main_portinf._get_lfcost_bus_defs(inter, self.bus_defs)))[0]
             nid_cost_map[nid] = l_fcost
         optimal_nids = pg.get_optimal_nids(nid_cost_map)
         self.assertTrue(len(optimal_nids) > 0)
@@ -279,7 +343,7 @@ class Grouper(unittest.TestCase):
     #    ])
     #    dport = ('background_signal_sub1', 1, 1)
 
-    #    i_bus_mappings = main.get_bus_matches(ports, self.bus_defs)
+    #    i_bus_mappings = main_portinf.get_bus_matches(ports, self.bus_defs)
     #    # all ports should be in some interface
     #    mapped_ports = set(util.flatten(
     #        [inter.ports for inter, _ in i_bus_mappings]
