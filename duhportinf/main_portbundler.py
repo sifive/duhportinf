@@ -50,7 +50,17 @@ def _get_bundles_from_ports(ports):
     for name in names:
         prefix = next(iter(util.words_from_name(name)))
         bundle_names[prefix].append(name)
-    bundles = [Bundle(names) for names in bundle_names.values()]
+    bundles = [
+        Bundle(names) 
+        for names in bundle_names.values()
+            if len(names) > 1
+    ]
+    singleton_names = util.flatten([
+        names for names in bundle_names.values()
+            if len(names) == 1
+    ])
+    rest_bundle = Bundle(singleton_names)
+    bundles.append(rest_bundle)
     return bundles
 
 #--------------------------------------------------------------------------

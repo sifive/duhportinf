@@ -184,6 +184,17 @@ def dump_json_bus_candidates(
         return (p[0], None if p[1] == None else int(p[1]), int(p[2]))
     def ref_from_name(name):
         return {'$ref': '#/definitions/busDefinitions/{}'.format(name)}
+    def get_cost_obj(interface, bm):
+        port_names = [p[0] for p in interface.ports]
+        prefix = common_prefix(port_names)
+        o = [
+            ('num_ports', interface.size),
+            ('prefix', prefix),
+            ('cost', round(float(bm.cost.value), 2)),
+            ('cost-dir-mismatch', int(bm.cost.dc)),
+            ('cost-width-mismatch', int(bm.cost.wc)),
+        ]
+        return o
     
     portgroup_objs = []
     busint_objs = []
@@ -249,37 +260,48 @@ def dump_json_bus_candidates(
             }
             pg_busints.append((busint_name, o))
 
-        if len(pg_busints) > 0:
-            busint_objs.extend([o for name, o in pg_busints])
-            busint_refs.append(ref_from_name(pg_busints[0][0]))
-            busint_alt_refs.extend(
-                [ref_from_name(name) for name, o in pg_busints[1:]]
-            )
-            busint_obj_map.update({name:o for name, o in pg_busints})
+        assert len(pg_busints) > 0
+        busint_objs.extend([o for name, o in pg_busints])
+        busint_refs.append(ref_from_name(pg_busints[0][0]))
+        busint_alt_refs.extend(
+            [ref_from_name(name) for name, o in pg_busints[1:]]
+        )
+        busint_obj_map.update({name:o for name, o in pg_busints})
 
         pgo = (
             'portgroup_{}'.format(i), 
-            [NoIndent(json_format(p)) for p in sorted(interface.ports)],
+            # show cost of best bus mapping
+            [NoIndent(e) for e in get_cost_obj(interface, bus_mappings[0])],
+            #[NoIndent(json_format(p)) for p in sorted(interface.ports)],
         )
         portgroup_objs.append(pgo)
         
     # update input block object with mapped bus interfaces and alternates
     with open(component_json5) as fin:
         block_obj = json5.load(fin)
-    assert 'definitions' in block_obj, \
+    dkey = 'definitions'
+    assert dkey in block_obj, \
         'component key not defined in input block object'
-    block_obj['definitions']['busDefinitions'] = busint_obj_map
+    if dkey not in block_obj:
+        block_obj[dkey] = {}
+    block_obj[dkey]['busDefinitions'] = busint_obj_map
+    block_obj[dkey]['busMappedPortGroups'] = portgroup_objs
     assert 'component' in block_obj, \
         'component key not defined in input block object'
     comp_obj = block_obj['component']
     bkey = 'busInterfaces' 
     if bkey not in comp_obj:
         comp_obj[bkey] = []
-    comp_obj[bkey].extend([NoIndent(o) for o in busint_refs])
+    refs = comp_obj[bkey]
+    refs.extend(busint_refs)
+    comp_obj[bkey] = [NoIndent(o) for o in refs]
     abkey = 'busInterfaceAlts' 
     if abkey not in comp_obj:
         comp_obj[abkey] = []
-    comp_obj[abkey].extend([NoIndent(o) for o in busint_alt_refs])
+    refs = comp_obj[abkey]
+    refs.extend(busint_alt_refs)
+    comp_obj[abkey] = [NoIndent(o) for o in refs]
+    
 
     if debug:
         block_obj = [
@@ -314,10 +336,10 @@ def dump_json_bundles(
     bundle_objs = []
     bundle_refs = []
     bundle_obj_map = {}
+    bnames = set()
     for i, bundle in enumerate(bundles): 
-        name = 'bundle_{}'.format(i)
         o = {
-            'name': name,
+            'name': bundle.name,
             'interfaceMode': None,
             'busType': 'bundle',
             'abstractionTypes': [{
@@ -326,8 +348,11 @@ def dump_json_bundles(
             }], 
         }
         bundle_objs.append(o)
-        bundle_refs.append(ref_from_name(name))
-        bundle_obj_map[name] = o
+        bundle_refs.append(ref_from_name(bundle.name))
+        bundle_obj_map[bundle.name] = o
+        # bundle names must be unique
+        assert bundle.name not in bnames
+        bnames.add(bundle.name)
 
     # update input block object with mapped bus interfaces and alternates
     with open(component_json5) as fin:
@@ -341,7 +366,12 @@ def dump_json_bundles(
     bkey = 'busInterfaces' 
     if bkey not in comp_obj:
         comp_obj[bkey] = []
-    comp_obj[bkey].extend([NoIndent(o) for o in bundle_refs])
+    refs = comp_obj[bkey]
+    refs.extend(bundle_refs)
+    comp_obj[bkey] = [NoIndent(r) for r in refs]
+    abkey = 'busInterfaceAlts' 
+    if abkey in comp_obj:
+        comp_obj[abkey] = [NoIndent(o) for o in comp_obj[abkey]]
 
     s = json.dumps(block_obj, indent=4, cls=PrettyPrintEncoder)
 

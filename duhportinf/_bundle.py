@@ -21,15 +21,30 @@ class Bundle(object):
     def tree(self):
         return copy.deepcopy(self._tree)
     @property
-    def root_prefix(self):
-        return util.common_prefix(self._tree.keys())
+    def name(self):
+        return self._name
+    @property
+    def size(self):
+        return len(self._port_names)
+    @property
+    def port_names(self):
+        return iter(self._port_names)
     
     def __init__(self, names):
+        self._port_names = list(names)
         self._tree = {}
-        for name in names:
+        for name in self._port_names:
             update(self._tree, self._subtree_from_name(name))
         self._format_vectors()
         self._flatten_passthru_paths()
+        # if the first level is a trunk (single key), designate as name,
+        # otherwise root
+        if len(self._tree) == 1 and self.size > 1:
+            self._name = next(iter(self._tree.keys())).strip('_')
+            branches = next(iter(self._tree.values()))
+            self._tree = branches
+        else:
+            self._name = 'root'
     
     def _flatten_passthru_paths(self):
         """

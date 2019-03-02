@@ -190,10 +190,30 @@ class Bundler(unittest.TestCase):
         # differ at their root word in the name
         bundles = main_portbundler._get_bundles_from_ports(ports)
         self.assertEqual(len(bundles), 3)
-        prefixes = [b.root_prefix for b in bundles]
+        names = [b.name for b in bundles]
         self.assertEqual(
-            list(sorted(prefixes)),
-            ['background', 'baz', 'foo'],
+            list(sorted(names)),
+            ['baz', 'foo', 'root'],
+        )
+
+        # singleton bundles should all be merged into rest
+        names = [
+            'foo_bar1',
+            'foo_bar2',
+            'rando',
+            'background',
+            'signals',
+        ]
+        ports = [(n, 1, 1) for n in names]
+        bundles = main_portbundler._get_bundles_from_ports(ports)
+        self.assertEqual(len(bundles), 2)
+        # singleton signals should all be placed in one bundle
+        bb = list(filter(lambda b: b.size == 3, bundles))
+        self.assertEqual(len(bb), 1)
+        b = next(iter(bb))
+        self.assertEqual(
+            list(sorted(b.port_names)),
+            ['background', 'rando', 'signals'],
         )
 
     def test_flatten_passthrus(self):
@@ -205,9 +225,9 @@ class Bundler(unittest.TestCase):
         bundle = _bundle.Bundle(names)
         tree = bundle.tree
         #print(json.dumps(bundle.tree, indent=2))
-        self.assertEqual('foo_bar', tree['foo_bar']['_'])
-        self.assertEqual('foo_bar_long_name_1', tree['foo_bar']['long_name_1'])
-        self.assertEqual('foo_bar_longy_name_2', tree['foo_bar']['longy_name_2'])
+        self.assertEqual('foo_bar', tree['_'])
+        self.assertEqual('foo_bar_long_name_1',  tree['long_name_1'])
+        self.assertEqual('foo_bar_longy_name_2', tree['longy_name_2'])
 
     def tearDown(self):
         pass
