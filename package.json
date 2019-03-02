@@ -1,6 +1,6 @@
 {
   "name": "duhportinf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "library to match flat named port list to library of bus specifications",
   "scripts": {
     "gen-reqs": ".npm-install/gen-local-req.py requirements.txt local-pylib-requirements.txt",
