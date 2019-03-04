@@ -159,7 +159,7 @@ class PortGrouper(object):
                     f_nid_costs,
                     key=lambda x: x[0],
                     reverse=True,
-                )[:2]
+                )[:3]
                 for _, _, opt_node in opt_nid_costs:
                     if opt_node.id not in seen_ids:
                         init_nodes.append(opt_node)
@@ -302,13 +302,15 @@ class PortGrouper(object):
             ## every leaf
             #assert len(nid_costs) > 0
             if len(nid_costs) > 0:
-                _, opt_nid, opt_node = min(nid_costs, key=lambda x: x[0])
-                opt_node.optimal += 1
+                min_cost = min([cost for cost, _, _ in nid_costs])
+                opt_nodes = [n for cost, _, n in nid_costs if cost == min_cost]
+                for opt_node in opt_nodes:
+                    opt_node.optimal += 1
 
         def get_tag_func(threshold):
             opt_nids = set()
             def tag_optimal_func(node):
-                if node.optimal > threshold:
+                if node.optimal >= threshold:
                     opt_nids.add(node.id)
             return tag_optimal_func, opt_nids
 

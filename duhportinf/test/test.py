@@ -350,7 +350,42 @@ class Grouper(unittest.TestCase):
             l_fcost = next(iter(main_portinf._get_lfcost_bus_defs(inter, self.bus_defs)))[0]
             nid_cost_map[nid] = l_fcost
         optimal_nids = pg.get_optimal_nids(nid_cost_map)
+        # there should be at least one optimal nid yielded for mapping
         self.assertTrue(len(optimal_nids) > 0)
+
+        port_names = [
+            'test_sub1_a',
+            'test_sub1_b',
+            'test_sub1_c',
+            'test_sub1_d',
+            'test_sub2_a',
+            'test_sub2_b',
+            'test_sub2_c',
+            'test_sub2_d',
+            'background_1',
+            'background_2',
+            'background_3',
+        ]
+        nid_cost_map = {}
+        ports = [(name, 1, 1) for name in port_names]
+        dport = ('test_sub1_a', 1, 1)
+        pg, _, _ = _grouper.get_port_grouper(ports)
+        nid_interface_map = {}
+        require_nids = set()
+        for nid, inter in pg.get_initial_interfaces():
+            # for all interfaces (except the root), assign an equal cost
+            nid_interface_map[nid] = inter
+            if dport in inter.ports:
+                if inter.prefix.startswith('test'):
+                    require_nids.add(nid)
+                    nid_cost_map[nid] = 1
+                else:
+                    nid_cost_map[nid] = 5
+        opt_nids = pg.get_optimal_nids(nid_cost_map, min_num_leafs=2)
+        self.assertEqual(
+            list(sorted(opt_nids)),
+            list(sorted(require_nids)),
+        )
 
     # FIXME no longer a guarantee of duh-portinf anymore
     #def test_all_ports_mapped(self):

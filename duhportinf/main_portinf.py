@@ -63,7 +63,12 @@ def _get_bus_pairings(pg, bus_defs):
     for nid, interface in pg.get_initial_interfaces():
         # for each port group, only pair the 5 bus defs with the lowest fcost
         i_bus_defs = _get_lfcost_bus_defs(interface, bus_defs)[:5]
+
         l_fcost = i_bus_defs[0][0]
+        # NOTE direction seems to be the only really informative metric for
+        # fcost, so just use this for now when finding optimal_nids
+        l_fcost = MatchCost(0,0,l_fcost.dc)
+
         i_bus_pairings.append((nid, l_fcost, interface, i_bus_defs))
         nid_cost_map[nid] = l_fcost
     

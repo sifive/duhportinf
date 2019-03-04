@@ -103,7 +103,7 @@ def get_mapping_fcost(interface, bus_def, penalize_umap=True):
     # determine name compatibility
     name_cost = _get_name_fcost(interface, bus_def)
     cost.nc = name_cost*len(ports)
-
+    
     return cost
 
 def map_ports_to_bus(interface, bus_def, penalize_umap=True):
