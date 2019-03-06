@@ -11,7 +11,7 @@ import subprocess
 import logging
 from .busdef import BusDef
 from ._optimize import map_ports_to_bus, get_mapping_fcost, MatchCost
-from ._grouper import get_port_grouper
+from ._bundle import BundleTree
 from . import busdef
 from . import util
 
@@ -52,7 +52,7 @@ def _get_lfcost_bus_defs(interface, bus_defs, penalize_umap=True):
         key=lambda x:x[0].value,
     ))
 
-def _get_bus_pairings(pg, bus_defs):
+def _get_bus_pairings(bt, bus_defs):
     # pass over all initial port groups and compute fcost to prioritize
     # potential bus pairings to optimize
     # NOTE need to keep track of node id in port group tree to pass back
@@ -60,7 +60,7 @@ def _get_bus_pairings(pg, bus_defs):
     i_bus_pairings = []
     nid_cost_map = {}
 
-    for nid, interface in pg.get_initial_interfaces():
+    for nid, interface in bt.get_initial_interfaces():
         # for each port group, only pair the 5 bus defs with the lowest fcost
         i_bus_defs = _get_lfcost_bus_defs(interface, bus_defs)[:5]
 
@@ -77,7 +77,7 @@ def _get_bus_pairings(pg, bus_defs):
     # NOTE don't bother trying to match a particular port group if all the
     # ports in that group potentially have a better assignment within
     # different groups based on fcost
-    optimal_nids = pg.get_optimal_nids(nid_cost_map)
+    optimal_nids = bt.get_optimal_nids(nid_cost_map)
     opt_i_bus_pairings = list(sorted(filter(
         # must be on an optimal path for some port
         lambda x : x[0] in optimal_nids,
@@ -89,7 +89,7 @@ def _get_bus_pairings(pg, bus_defs):
 
     return opt_i_bus_pairings
     
-def _get_initial_bus_matches(pg, i_bus_pairings):
+def _get_initial_bus_matches(bt, i_bus_pairings):
     
     # perform bus mappings for chosen subset to determine lowest cost bus
     # mapping for each port group
@@ -119,7 +119,7 @@ def _get_initial_bus_matches(pg, i_bus_pairings):
             bus_mappings,
         ))
 
-    optimal_nids = pg.get_optimal_nids(nid_cost_map)
+    optimal_nids = bt.get_optimal_nids(nid_cost_map)
     opt_i_bus_mappings = list(sorted(filter(
         lambda x : x[0] in optimal_nids,
         i_bus_mappings,
@@ -197,16 +197,14 @@ def _map_residual(interface, _src_bm, bus_defs):
 
 
 def get_bus_matches(ports, bus_defs):
-    logging.info('hierarchically clustering ports and selecting port groups')
-    pg, Z, wire_names = get_port_grouper(ports)
-    logging.info('  - done')
+    bt = BundleTree(ports)
 
     logging.info('initial bus pairing with port groups')
-    opt_i_bus_pairings = _get_bus_pairings(pg, bus_defs)
+    opt_i_bus_pairings = _get_bus_pairings(bt, bus_defs)
     logging.info('  - done')
     
     logging.info('bus mapping')
-    opt_i_bus_mappings = _get_initial_bus_matches(pg, opt_i_bus_pairings)
+    opt_i_bus_mappings = _get_initial_bus_matches(bt, opt_i_bus_pairings)
     logging.info('  - done')
 
     # return pairings of <interface, bus_mapping>

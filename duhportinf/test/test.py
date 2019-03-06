@@ -5,152 +5,12 @@ import json
 from .. import util
 from .. import main_portinf
 from .. import main_portbundler
-from .. import _grouper 
 from .. import _optimize 
 from ..busdef import BusDef
-from .. import _interface
 from .. import _bundle
 
 util.silent = True
 
-class BundleRecognizer(unittest.TestCase):
-
-    def test_recognize_vector(self):
-       
-        def check_type(ports, cls):
-            bundle = _grouper.get_bundle_designation(ports)
-            self.assertEqual(type(bundle), cls)
-        def check_prefix(ports, prefix):
-            bundle = _grouper.get_bundle_designation(ports)
-            self.assertEqual(bundle.prefix, prefix)
-
-        vector_ports = [('test_bit{}_n'.format(i), 1, 1) for i in range(20)]
-        bundle1 = _grouper.get_bundle_designation(vector_ports)
-        self.assertEqual(type(bundle1), _interface.VectorBundle)
-        self.assertEqual(min(bundle1.range), 0)
-        self.assertEqual(max(bundle1.range), 19)
-        self.assertEqual(bundle1.prefix, 'test_bit')
-
-        # skip indices so designation should be directed bundle, *not*
-        # vector
-        directed_ports1 = list(vector_ports)
-        directed_ports1.append(('test_bit30_n', 1, 1))
-        check_type(directed_ports1, _grouper.DirectedBundle)
-
-        directed_ports2 = list(vector_ports)
-        # change width of one port so designation should be directed
-        # bundle, *not* vector
-        directed_ports2[0] = ('test_bit0_n', 2, 1)
-        check_type(directed_ports2, _grouper.DirectedBundle)
-
-        directed_ports2 = list(vector_ports)
-        # change direction of another port so designation should be
-        # undirected bundle
-        directed_ports2[1] = ('test_bit1_n', 2, -1)
-        check_type(directed_ports2, _interface.UndirectedBundle)
-
-        # test prefixing
-        ports3 = list(vector_ports)
-        ports3.append(('test_bad', 1, 1))
-        check_prefix(ports3, 'test_b')
-        ports3.append(('ntest_bad', 1, 1))
-        check_prefix(ports3, '')
-
-    def test_label_vector(self):
-        ports = [('test_bit{}_n'.format(i), 1, 1) for i in range(2, 20)]
-        pg, _, _ = _grouper.get_port_grouper(ports)
-        interfaces = list([inter for _, inter in pg.get_initial_interfaces()])
-        self.assertEqual(len(interfaces), 1)
-        interface = next(iter(interfaces))
-        bundles = list(interface.bundles)
-        self.assertEqual(len(bundles), 1)
-        bundle = next(iter(bundles))
-        self.assertEqual(type(bundle), _interface.VectorBundle)
-
-    def test_label_multiple_vectors(self):
-        # create three vector groups and some background ports, which
-        # should *not* be zipped into structs
-        p1 = [('test_bit{}_n'.format(i), 1, 1) for i in range(2, 20)]
-        p2 = [('test_bit_sub{}_n'.format(i), 1, 1) for i in range(10)]
-        p3 = [('test2_bit_{}_n_y'.format(i), 1, 1) for i in range(5)]
-        ports = [p for pp in [p1, p2, p3] for p in pp]
-        ports.extend([(name, 1, 1) for name in [
-            'testy_unrelated',
-            'unrelated1',
-            'unrelated_sub1',
-        ]])
-        pg, _, _ = _grouper.get_port_grouper(ports)
-        wide_interfaces = [
-            inter 
-            for _, inter in pg.get_initial_interfaces() 
-                if len(list(inter.bundles)) == 3
-        ]
-        self.assertEqual(len(wide_interfaces), 1)
-        root_interface = next(iter(wide_interfaces))
-        vbundles = list(filter(
-            lambda b: type(b) == _interface.VectorBundle, 
-            root_interface.bundles,
-        ))
-        # all three vectors must appear in their own designated interface
-        # as a vector bundle
-        self.assertEqual(len(vbundles), 3)
-        b1, b2, b3 = sorted(vbundles, key=lambda b: b.size)
-        self.assertEqual(b1.prefix, 'test2_bit_')
-        self.assertEqual(min(b1.range), 0)
-        self.assertEqual(max(b1.range), 4)
-        self.assertEqual(b2.prefix, 'test_bit_sub')
-        self.assertEqual(min(b2.range), 0)
-        self.assertEqual(max(b2.range), 9)
-        self.assertEqual(b3.prefix, 'test_bit')
-        self.assertEqual(min(b3.range), 2)
-        self.assertEqual(max(b3.range), 19)
-
-    # FIXME structify no longer a member of duh-portinf, will be moved to
-    # duh-portbundler
-    #def test_structify_vectors(self):
-    #    p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
-    #    p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
-    #    ports = [p for pp in [p1, p2] for p in pp]
-    #    # temporary fix so that a structed interface is yielded
-    #    ports.append(('background_signal', 1, 1))
-
-    #    def get_type_bundles(inter, btype):
-    #        return list(filter(
-    #            lambda b: type(b) == btype,
-    #            inter.bundles_structed,
-    #        ))
-
-    #    pg, _, _ = _grouper.get_port_grouper(ports)
-    #    structed_interfaces = list(filter(
-    #        lambda inter: inter.structed_width > 0,
-    #        map(lambda x: x[1], pg.get_initial_interfaces()),
-    #    ))
-    #    #for _, inter in pg.get_initial_interfaces():
-    #    #    print('interface ports')
-    #    #    for p in inter.ports:
-    #    #        print('  - ', p)
-    #    # precisely one structed interface
-    #    self.assertEqual(len(structed_interfaces), 1)
-    #    sinter = next(iter(structed_interfaces))
-    #    svbundles = list(sinter.struct_bundles)
-    #    # with a single vector struct
-    #    self.assertEqual(len(svbundles), 1)
-    #    svbundle = next(iter(svbundles))
-    #    self.assertEqual(max(svbundle.range), 9)
-    #    self.assertEqual(min(svbundle.range), 0)
-    #    self.assertEqual(
-    #        tuple(sorted(svbundle.attributes)),
-    #        tuple(sorted([
-    #            ('test_bit_1field', 1, 1), ('test_bit_2field', 1, 1)
-    #        ])),
-    #    )
-    #    self.assertEqual(
-    #        tuple(sorted(svbundle.attributes_short)),
-    #        tuple(sorted([
-    #            ('1field', 1, 1), ('2field', 1, 1)
-    #        ])),
-    #    )
-        
 class Bundler(unittest.TestCase):
 
     def setUp(self):
@@ -159,6 +19,8 @@ class Bundler(unittest.TestCase):
     def test_basic(self):
         names = [
             'foo',
+            'foo_bat1',
+            'foo_bat2',
             'foo_bar1',
             'foo_bar2',
             'foo_bar3',
@@ -166,10 +28,11 @@ class Bundler(unittest.TestCase):
             'foo_baz3',
             'background',
         ]
-        bundle = _bundle.Bundle(names)
+        ports = [(n, 1, 1) for n in names]
+        bundle = _bundle.BundleTree(ports)
         tree = bundle.tree
         # foo.bar should be vector
-        self.assertTrue(type(tree['foo']['bar']) in [list,tuple])
+        self.assertTrue(type(tree['foo']['bar']) == list)
         self.assertEqual(len(tree['foo']['bar']), 3)
         # foo.baz should be *not* be a vector
         self.assertTrue(type(tree['foo']['baz']) == dict)
@@ -212,7 +75,7 @@ class Bundler(unittest.TestCase):
         self.assertEqual(len(bb), 1)
         b = next(iter(bb))
         self.assertEqual(
-            list(sorted(b.port_names)),
+            list(sorted([p[0] for p in b.ports])),
             ['background', 'rando', 'signals'],
         )
 
@@ -222,12 +85,61 @@ class Bundler(unittest.TestCase):
             'foo_bar_long_name_1',
             'foo_bar_longy_name_2',
         ]
-        bundle = _bundle.Bundle(names)
+        ports = [(n, 1, 1) for n in names]
+        bundle = _bundle.BundleTree(ports)
         tree = bundle.tree
         #print(json.dumps(bundle.tree, indent=2))
-        self.assertEqual('foo_bar', tree['_'])
-        self.assertEqual('foo_bar_long_name_1',  tree['long_name_1'])
-        self.assertEqual('foo_bar_longy_name_2', tree['longy_name_2'])
+        self.assertEqual(bundle.name, 'foo_bar')
+        self.assertEqual('foo_bar', tree['_'][0])
+        self.assertEqual('foo_bar_long_name_1',  tree['long_name_1'][0])
+        self.assertEqual('foo_bar_longy_name_2', tree['longy_name_2'][0])
+
+    def test_label_vector(self):
+        vector_ports = [('test_bit{}_n'.format(i), 1, 1) for i in range(20)]
+        bundle1 = _bundle.BundleTree(vector_ports)
+        tree = bundle1.tree
+        # should be a vector
+        self.assertEqual(bundle1.name, 'root')
+        self.assertEqual(type(tree['test_bit']), list)
+
+        # skip indices so designation should be directed bundle, *not*
+        # vector
+        directed_ports1 = list(vector_ports)
+        directed_ports1.append(('test_bit30_n', 1, 1))
+        bundle2 = _bundle.BundleTree(directed_ports1)
+        tree2 = bundle2.tree
+        # should *not* be a vector
+        self.assertEqual(bundle2.name, 'test_bit')
+        self.assertTrue(type(tree2), dict)
+
+        directed_ports2 = list(vector_ports)
+        # change width of one port so designation should be directed
+        # bundle, *not* vector
+        directed_ports2[0] = ('test_bit0_n', 2, 1)
+        bundle3 = _bundle.BundleTree(directed_ports1)
+        tree3 = bundle3.tree
+        # should *not* be a vector
+        self.assertEqual(bundle3.name, 'test_bit')
+        self.assertTrue(type(tree3), dict)
+
+    def test_label_multiple_vectors(self):
+        # create three vector groups and some background ports, which
+        # should *not* be zipped into structs
+        p1 = [('test_bit{}_n'.format(i), 1, 1) for i in range(2, 20)]
+        p2 = [('test_bit_sub{}_n'.format(i), 1, 1) for i in range(10)]
+        p3 = [('test2_bit_{}_n_y'.format(i), 1, 1) for i in range(5)]
+        ports = [p for pp in [p1, p2, p3] for p in pp]
+        ports.extend([(name, 1, 1) for name in [
+            'testy_unrelated',
+            'unrelated1',
+            'unrelated_sub1',
+        ]])
+        bt = _bundle.BundleTree(ports)
+        tree = bt.tree
+        # test all three vectors properly grouped and tagged
+        self.assertEqual(type(tree['test']['bit']['_']), list)
+        self.assertEqual(type(tree['test']['bit']['sub']), list)
+        self.assertEqual(type(tree['test']['2_bit']), list)
 
     def tearDown(self):
         pass
@@ -257,23 +169,21 @@ class Grouper(unittest.TestCase):
         ports = set([(p, 1, 1) for p in port_names])
 
         seen = set()
-        pg, _, _ = _grouper.get_port_grouper(ports)
-        for nid, inter in pg.get_initial_interfaces():
-            self.assertEqual(len(list(inter.vector_bundles)), 0)
-            self.assertEqual(len(list(inter.nonvector_bundles)), 1)
-            seen |= set(inter.ports)
-            prefix = next(iter(inter.ports))[0][:len('axi1')]
+        bt = _bundle.BundleTree(ports)
+        for nid, inter in bt.get_initial_interfaces():
+            self.assertEqual(len(inter.vectors), 0)
+            seen |= set(inter.all_ports)
+            prefix = inter.prefix[:len('axi1')]
             # all signals in group must have same prefix
             self.assertTrue(
                 all([p[0].startswith(prefix) for p in inter.ports])
             )
 
-        #self.assertEqual(2, len(port_groups))
         self.assertTrue(ports.issubset(seen))
 
     def test_grouping_nested(self):
         port_group_map = {
-            'axi0': set([
+            'axi0_A': set([
                 'axi0_ACLK',
                 'axi0_ARESETn',
                 'axi0_ARQOS',
@@ -282,7 +192,7 @@ class Grouper(unittest.TestCase):
                 'axi0_AWADDR',
                 'axi0_AWLEN',
             ]),
-            'axi1_sub1': set([
+            'axi1_sub1_A': set([
                 'axi1_sub1_ACLK',
                 'axi1_sub1_ARESETn',
                 'axi1_sub1_ARQOS',
@@ -291,7 +201,7 @@ class Grouper(unittest.TestCase):
                 'axi1_sub1_AWADDR',
                 'axi1_sub1_AWLEN',
             ]),
-            'axi1_sub2': set([
+            'axi1_sub2_A': set([
                 'axi1_sub2_ACLK',
                 'axi1_sub2_ARESETn',
                 'axi1_sub2_ARQOS',
@@ -306,21 +216,14 @@ class Grouper(unittest.TestCase):
         seen_ports = set()
         seen_prefix = set()
 
-        pg, _, _ = _grouper.get_port_grouper(ports)
-        for nid, inter in pg.get_initial_interfaces():
+        bt = _bundle.BundleTree(ports)
+        for nid, inter in bt.get_initial_interfaces():
             seen_ports |= set(inter.ports)
             pname = next(iter(inter.ports))[0]
-            prefix = (
-                pname[:len('axi1_sub1')] 
-                if pname.startswith('axi1_sub')
-                else pname[:len('axi0')]
-            )
             # a port group of the size expected must have all prefix match
-            if inter.size == len(port_group_map[prefix]):
-                self.assertTrue(
-                    all([p[0].startswith(prefix) for p in inter.ports])
-                )
-                seen_prefix.add(prefix)
+            if inter.prefix in port_group_map:
+                self.assertEqual(inter.size, len(port_group_map[inter.prefix]))
+                seen_prefix.add(inter.prefix)
         self.assertTrue(ports.issubset(seen_ports))
         # must see all three full prefix groups
         self.assertEqual(len(seen_prefix), 3)
@@ -344,12 +247,12 @@ class Grouper(unittest.TestCase):
         ]
         nid_cost_map = {}
         ports = [(name, 1, 1) for name in port_names]
-        pg, _, _ = _grouper.get_port_grouper(ports)
-        for nid, inter in pg.get_initial_interfaces():
+        bt = _bundle.BundleTree(ports)
+        for nid, inter in bt.get_initial_interfaces():
             # for each port group, only pair the 5 bus defs with the lowest fcost
             l_fcost = next(iter(main_portinf._get_lfcost_bus_defs(inter, self.bus_defs)))[0]
             nid_cost_map[nid] = l_fcost
-        optimal_nids = pg.get_optimal_nids(nid_cost_map)
+        optimal_nids = bt.get_optimal_nids(nid_cost_map)
         # there should be at least one optimal nid yielded for mapping
         self.assertTrue(len(optimal_nids) > 0)
 
@@ -369,10 +272,12 @@ class Grouper(unittest.TestCase):
         nid_cost_map = {}
         ports = [(name, 1, 1) for name in port_names]
         dport = ('test_sub1_a', 1, 1)
-        pg, _, _ = _grouper.get_port_grouper(ports)
+        bt = _bundle.BundleTree(ports)
         nid_interface_map = {}
         require_nids = set()
-        for nid, inter in pg.get_initial_interfaces():
+        nid_inter_map = {}
+        for nid, inter in bt.get_initial_interfaces():
+            nid_inter_map[nid] = inter
             # for all interfaces (except the root), assign an equal cost
             nid_interface_map[nid] = inter
             if dport in inter.ports:
@@ -381,48 +286,11 @@ class Grouper(unittest.TestCase):
                     nid_cost_map[nid] = 1
                 else:
                     nid_cost_map[nid] = 5
-        opt_nids = pg.get_optimal_nids(nid_cost_map, min_num_leafs=2)
+        opt_nids = bt.get_optimal_nids(nid_cost_map, min_num_leaves=2)
         self.assertEqual(
             list(sorted(opt_nids)),
             list(sorted(require_nids)),
         )
-
-    # FIXME no longer a guarantee of duh-portinf anymore
-    #def test_all_ports_mapped(self):
-    #    p1 = [('test_bit_1field{}_n'.format(i), 1, 1) for i in range(10)]
-    #    p2 = [('test_bit_2field{}_n'.format(i), 1, 1) for i in range(10)]
-    #    ports = [p for pp in [p1, p2] for p in pp]
-    #    ports.extend([
-    #        ('background_signal_sub1', 1, 1),
-    #        ('background_signal_sub2', 1, 1),
-    #    ])
-    #    dport = ('background_signal_sub1', 1, 1)
-
-    #    i_bus_mappings = main_portinf.get_bus_matches(ports, self.bus_defs)
-    #    # all ports should be in some interface
-    #    mapped_ports = set(util.flatten(
-    #        [inter.ports for inter, _ in i_bus_mappings]
-    #    ))
-    #    self.assertTrue(set(ports).issubset(mapped_ports))
-
-    #    # background signals should be grouped together in a single
-    #    # interface without any bus mappings
-    #    # NOTE this depends on the fact that the default threshold for a
-    #    # node to be tagged with optimal_nid is to have at least
-    #    # min_num_leafs=4 leaf nodes for which this node is optimal.
-    #    # there are only two background_signals leafs so this will not get
-    #    # selected and must be caught by _grouper.get_remaining_interfaces
-    #    unmatched_inters = list(filter(
-    #        lambda x: len(x[1]) == 0,
-    #        i_bus_mappings,
-    #    ))
-    #    self.assertEqual(len(unmatched_inters), 1)
-    #    inter = next(iter(unmatched_inters))[0]
-    #    self.assertEqual(inter.size, 2)
-    #    bs = list(inter.bundles)
-    #    self.assertEqual(len(bs), 1)
-    #    b = next(iter(bs))
-    #    self.assertEqual(b.prefix, 'background_signal_sub')
 
     def tearDown(self):
         pass
@@ -445,7 +313,7 @@ class Fcost(unittest.TestCase):
             ('scram_rddata', None, 1),
             ('scram_rdderr', None, 1),
         ]
-        interface = _interface.Interface.get_undirected(ports)
+        interface = _bundle.Interface(ports, [])
         dpram_master_bd = next(filter(
             lambda bd: (
                 bd.abstract_type.name == 'DPRAM_rtl' and 
@@ -502,7 +370,7 @@ class BusMapping(unittest.TestCase):
         ])
         axi0_ports = [pp for pp, bp in true_mappings]
         axi0_ports.extend(true_sideband_ports)
-        axi0_interface = _interface.Interface.get_undirected(axi0_ports)
+        axi0_interface = _bundle.Interface(axi0_ports, [])
 
         bus_mappings = list(sorted([
             _optimize.map_ports_to_bus(axi0_interface, bd)
@@ -543,7 +411,7 @@ class BusMapping(unittest.TestCase):
             (('front_port_axi4_0_b_ready', 1, 1), ('BREADY', 1, 1)),
 
         ])
-        core_interface = _interface.Interface.get_undirected([pp for pp, bp in true_mappings])
+        core_interface = _bundle.Interface([pp for pp, bp in true_mappings], [])
         bus_mappings = list(sorted([
             _optimize.map_ports_to_bus(core_interface, bd)
             for bd in self.bus_defs

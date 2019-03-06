@@ -12,7 +12,7 @@ import logging
 from itertools import chain
 from collections import defaultdict
 from . import util
-from ._bundle import Bundle
+from ._bundle import BundleTree
 
 def _get_unassigned_ports(all_ports, bus_interfaces):
     def get_portnames(interface):
@@ -44,22 +44,22 @@ def _get_unassigned_ports(all_ports, bus_interfaces):
     return unassn_ports
 
 def _get_bundles_from_ports(ports):
-    names = [p[0] for p in ports]
     # create separate for each group of ports one removed from the root
-    bundle_names = defaultdict(list)
-    for name in names:
+    bundle_ports = defaultdict(list)
+    for port in ports:
+        name, _, _ = port
         prefix = next(iter(util.words_from_name(name)))
-        bundle_names[prefix].append(name)
+        bundle_ports[prefix].append(port)
     bundles = [
-        Bundle(names) 
-        for names in bundle_names.values()
-            if len(names) > 1
+        BundleTree(ports) 
+        for ports in bundle_ports.values()
+            if len(ports) > 1
     ]
-    singleton_names = util.flatten([
-        names for names in bundle_names.values()
-            if len(names) == 1
+    singleton_ports = util.flatten([
+        ports for ports in bundle_ports.values()
+            if len(ports) == 1
     ])
-    rest_bundle = Bundle(singleton_names)
+    rest_bundle = BundleTree(singleton_ports)
     bundles.append(rest_bundle)
     return bundles
 

@@ -86,6 +86,12 @@ def get_num_missing_tokens(n1, n2):
     n2t = set(get_tokens(n2))
     return len(n1t - n2t)
 
+def get_id_gen():
+    i = 0
+    while True:
+        yield i
+        i += 1
+
 def progress_bar(
     iteration,
     total,
@@ -177,7 +183,7 @@ def dump_json_bus_candidates(
 
     def expand_if_vector(interface, port):
         if interface.is_vector(port):
-            return interface.get_vector(port)
+            return [p[0] for p in interface.get_vector(port)]
         else:
             return port
     def json_format(p):
@@ -325,11 +331,6 @@ def dump_json_bundles(
     debug=False,
 ):
 
-    #def expand_if_vector(interface, port):
-    #    if interface.is_vector(port):
-    #        return interface.get_vector(port)
-    #    else:
-    #        return port
     def ref_from_name(name):
         return {'$ref': '#/definitions/bundleDefinitions/{}'.format(name)}
     
