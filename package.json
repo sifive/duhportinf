@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "description": "library to match flat named port list to library of bus specifications",
   "scripts": {
+    "preinstall": ".npm-install/check-py.sh",
     "gen-reqs": ".npm-install/gen-local-req.py requirements.txt local-pylib-requirements.txt",
     "install-pyreqs": "pip3 install --target $PWD/pylib -r local-pylib-requirements.txt",
     "install": "npm run -s gen-reqs && npm run -s install-pyreqs && pip3 install --target $PWD/pylib ."
