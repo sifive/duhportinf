@@ -256,7 +256,7 @@ def dump_json_bus_candidates(
                 ('unmapped', []),
             ]
             o = {
-                'name': busint_name,
+                'name': interface.prefix.strip('_'),
                 'interfaceMode': bm.bus_def.driver_type,
                 'busType': bm.bus_def.abstract_type,
                 'abstractionTypes': [{
