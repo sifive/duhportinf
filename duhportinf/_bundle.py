@@ -120,9 +120,8 @@ class BundleTreeNode(object):
         cinter = None
         if self.is_vector:
             cinter = Interface([], [list(self.vports)])
-        elif self.is_leaf: # non-vector leaf
+        elif self.port:
             cinter = Interface([self.port], [])
-        assert None not in self.children
         self._interface = Interface.merge(*[n.interface for n in self.children])
         if cinter:
             self._interface = Interface.merge(self._interface, cinter)
