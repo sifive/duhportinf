@@ -54,6 +54,11 @@ class Interface(object):
     def get_vector(self, vkey):
         return self._vkey_vector_map[vkey]
 
+class Bundle(object):
+    def __init__(self, tree, name):
+        self.tree = tree
+        self.name = name
+
 class BundleTreeNode(object):
     id_gen = util.get_id_gen()
         
@@ -187,21 +192,26 @@ class BundleTreeNode(object):
             child = self.get_child(ptr)
             child.update(ss_child)
 
-    def as_dict(self):
+    def as_dict(self, name_only=False):
+        def fmt_vector(v):
+            return [p[0] for p in v] if name_only else list(v)
+        def fmt_port(p):
+            return p[0] if name_only else p
+
         if self.is_leaf and self.is_vector:
-            return list(self.vports)
+            return fmt_vector(self.vports)
         elif self.is_leaf:
-            return self.port
+            return fmt_port(self.port)
         else:
             assert not (self.port and self.is_vector), \
                 "node cannot both have a port and be a vector"
             d = {}
             for ptr, child in self.children_refs:
-                d[ptr] = child.as_dict()
+                d[ptr] = child.as_dict(name_only)
             if self.port:
-                d['_'] = self.port
+                d['_'] = fmt_port(self.port)
             if self.is_vector:
-                d['_'] = list(self.vports)
+                d['_'] = fmt_vector(self.vports)
             return d
 
 class BundleTree(object):
@@ -307,6 +317,33 @@ class BundleTree(object):
                 break
         return opt_nids
         
+    def get_bundles(self):
+        """
+        return bundles for all non-leaf children of the root and a single
+        bundle for the remaining leaf children of the root (ungrouped
+        ports).
+        """
+        bundles = [
+            Bundle(n.as_dict(name_only=True), ptr)
+            for ptr, n in self._root_node.children_refs
+                if not n.is_leaf
+        ]
+
+        # remove non-leaf children pointers of root from root bundle,
+        # these are yielded as separate bundles
+        root_tree = self._root_node.as_dict(name_only=True)
+        filt_ptrs = [
+            ptr
+            for ptr, n in self._root_node.children_refs 
+                if not n.is_leaf
+        ]
+        for ptr in filt_ptrs:
+            del root_tree[ptr]
+        if len(root_tree) > 0:
+            bundles.append(Bundle(root_tree, 'root'))
+
+        return bundles
+
     def _subtree_from_port(self, port):
         """
         convert name of port to subtree to be inserted

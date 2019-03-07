@@ -43,26 +43,6 @@ def _get_unassigned_ports(all_ports, bus_interfaces):
     unassn_ports = [p for p in all_ports if p[0] not in assn_portnames]
     return unassn_ports
 
-def _get_bundles_from_ports(ports):
-    # create separate for each group of ports one removed from the root
-    bundle_ports = defaultdict(list)
-    for port in ports:
-        name, _, _ = port
-        prefix = next(iter(util.words_from_name(name)))
-        bundle_ports[prefix].append(port)
-    bundles = [
-        BundleTree(ports) 
-        for ports in bundle_ports.values()
-            if len(ports) > 1
-    ]
-    singleton_ports = util.flatten([
-        ports for ports in bundle_ports.values()
-            if len(ports) == 1
-    ])
-    rest_bundle = BundleTree(singleton_ports)
-    bundles.append(rest_bundle)
-    return bundles
-
 #--------------------------------------------------------------------------
 # main
 #--------------------------------------------------------------------------
@@ -102,11 +82,11 @@ def main():
     all_ports = util.format_ports(block['component']['model']['ports'])
     bus_interfaces = block['component']['busInterfaces']
     unassn_ports = _get_unassigned_ports(all_ports, bus_interfaces)
-    bundles = _get_bundles_from_ports(unassn_ports)
+    bt = BundleTree(unassn_ports)
     util.dump_json_bundles(
         args.output,
         args.component_json5,
-        bundles,
+        bt.get_bundles(),
         args.debug,
     )
 

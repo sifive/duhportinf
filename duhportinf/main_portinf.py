@@ -225,7 +225,7 @@ def main():
         '-o', '--output',
         default=sys.stdout,
         required=False,
-        help='output path to busprop.json with proposed bus mappings for select groups of ports',
+        help='output path to busprop.json with proposed bus mappings for select groups of ports (default: stdout)',
     )
     parser.add_argument(
         '--debug',

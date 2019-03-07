@@ -51,7 +51,8 @@ class Bundler(unittest.TestCase):
 
         # main bundler should give three separate bundles for groups of ports that
         # differ at their root word in the name
-        bundles = main_portbundler._get_bundles_from_ports(ports)
+        bt = _bundle.BundleTree(ports)
+        bundles = bt.get_bundles()
         self.assertEqual(len(bundles), 3)
         names = [b.name for b in bundles]
         self.assertEqual(
@@ -61,21 +62,22 @@ class Bundler(unittest.TestCase):
 
         # singleton bundles should all be merged into rest
         names = [
-            'foo_bar1',
-            'foo_bar2',
+            'foo_bar_lol',
+            'foo_bar_ex',
             'rando',
             'background',
             'signals',
         ]
         ports = [(n, 1, 1) for n in names]
-        bundles = main_portbundler._get_bundles_from_ports(ports)
+        bt = _bundle.BundleTree(ports)
+        bundles = bt.get_bundles()
         self.assertEqual(len(bundles), 2)
         # singleton signals should all be placed in one bundle
-        bb = list(filter(lambda b: b.size == 3, bundles))
+        bb = list(filter(lambda b: len(b.tree) == 3, bundles))
         self.assertEqual(len(bb), 1)
         b = next(iter(bb))
         self.assertEqual(
-            list(sorted([p[0] for p in b.ports])),
+            list(sorted([p for p in b.tree.values()])),
             ['background', 'rando', 'signals'],
         )
 
