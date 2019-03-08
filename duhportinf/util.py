@@ -1,9 +1,11 @@
 from itertools import chain
 from _ctypes import PyObj_FromPtr
 import json
+from jsonref import JsonRef
 import json5
 import re
 import numpy as np
+import logging
 
 silent = False
 
@@ -21,6 +23,69 @@ def format_ports(in_ports):
             w, d = None, np.sign(-1) if pw[0] == '-' else np.sign(1)
         fmt_ports.append((name, w, d))
     return fmt_ports
+
+def _get_bundle_ports(tree):
+    strees = [v for v in tree.values() if type(v) == dict]
+    fvals  = [v for v in tree.values() if type(v) != dict]
+    for stree in strees:
+        fvals.extend(_get_bundle_ports(stree))
+    return fvals
+
+def get_unassigned_ports(component_json):
+
+    with open(component_json) as fin:
+        block = json5.load(fin)
+        block = JsonRef.replace_refs(block)
+    try:
+        block['component']['model']['ports']
+    except:
+        logging.error('obj["component"]["model"]["ports"] not accessible in {}'.format(component_json))
+
+    try:
+        block['component']['busInterfaces']
+    except:
+        logging.error('obj["component"]["busInterfaces"] not accessible in {}'.format(component_json))
+
+    all_ports = format_ports(block['component']['model']['ports'])
+    bus_interfaces = block['component']['busInterfaces']
+
+    def get_portnames(interface):
+        atkey = 'abstractionTypes'
+        pmkey = 'portMaps'
+        vkey = 'viewRef'
+        if interface['busType'] == 'bundle':
+            pns_ = flatten([
+            _get_bundle_ports(at[pmkey]) for at in interface[atkey] 
+                    if at[vkey] == 'RTLview'
+            ])
+        else:
+            pns_ = flatten([
+                at[pmkey].values() for at in interface[atkey] 
+                    if at[vkey] == 'RTLview'
+            ])
+        nv_pns = [p for p in pns_ if type(p) == str]
+        # flatten vectors
+        v_pns = flatten([p for p in pns_ if type(p) != str])
+        return set(chain(v_pns, nv_pns))
+
+    portname_sets = [
+        set(get_portnames(interface)) for interface in bus_interfaces
+    ]
+    seen = set()
+    dups = set()
+    for pns in portname_sets:
+        dups |= (pns & seen)
+        seen |= pns
+    if len(dups) > 0:
+        logging.error('ports illegally belong to multiple bus interfaces:')
+        for port in list(sorted(dups))[:10]:
+            logging.error('  - {}'.format(port))
+        if len(dups) > 10:
+            logging.error('  ...')
+
+    assn_portnames = set(seen)
+    unassn_ports = [p for p in all_ports if p[0] not in assn_portnames]
+    return unassn_ports
 
 def words_from_name(name):
     # convert camelcase to '_'
@@ -201,12 +266,22 @@ def dump_json_bus_candidates(
             ('cost-width-mismatch', int(bm.cost.wc)),
         ]
         return o
+
+    def get_cnt_base():
+        with open(component_json5) as fin:
+            block_obj = json5.load(fin)
+        try:
+            return block_obj['definitions']['pg_cnt']
+        except:
+            return 0
     
     portgroup_objs = []
     busint_objs = []
     busint_obj_map = {}
     busint_refs = []
     busint_alt_refs = []
+    pg_cnt_base = get_cnt_base()
+
     for i, (interface, bus_mappings) in enumerate(sorted(
         i_bus_mappings,
         key=lambda x: x[0].size,
@@ -215,9 +290,10 @@ def dump_json_bus_candidates(
         pg_busints = []
         for j, bus_mapping in enumerate(bus_mappings):
             bm = bus_mapping
-            busint_name = 'busint-portgroup_{}-{}-{}-{}'.format(
-                i,
+            busint_name = 'busint-portgroup_{}-mapping_{}-prefix_{}-{}-{}'.format(
+                pg_cnt_base+i,
                 j,
+                interface.prefix.strip('_'),
                 bm.bus_def.driver_type,
                 bm.bus_def.abstract_type.name,
             )
@@ -286,29 +362,35 @@ def dump_json_bus_candidates(
     with open(component_json5) as fin:
         block_obj = json5.load(fin)
     dkey = 'definitions'
-    assert dkey in block_obj, \
-        'component key not defined in input block object'
     if dkey not in block_obj:
         block_obj[dkey] = {}
-    block_obj[dkey]['busDefinitions'] = busint_obj_map
-    block_obj[dkey]['busMappedPortGroups'] = portgroup_objs
+    
+    # bump counter for the case portinf is run again
+    block_obj[dkey]['pg_cnt'] = pg_cnt_base + len(i_bus_mappings)
+
+    bdkey = 'busDefinitions'
+    if bdkey not in block_obj[dkey]:
+        block_obj[dkey][bdkey] = {}
+    block_obj[dkey][bdkey].update(busint_obj_map)
+
+    bmkey = 'busMappedPortGroups'
+    if bmkey not in block_obj[dkey]:
+        block_obj[dkey][bmkey] = []
+    block_obj[dkey][bmkey].extend(portgroup_objs)
     assert 'component' in block_obj, \
         'component key not defined in input block object'
     comp_obj = block_obj['component']
+
     bkey = 'busInterfaces' 
-    if bkey not in comp_obj:
-        comp_obj[bkey] = []
-    refs = comp_obj[bkey]
+    refs = [] if bkey not in comp_obj else comp_obj[bkey]
     refs.extend(busint_refs)
     comp_obj[bkey] = [NoIndent(o) for o in refs]
+
     abkey = 'busInterfaceAlts' 
-    if abkey not in comp_obj:
-        comp_obj[abkey] = []
-    refs = comp_obj[abkey]
+    refs = [] if abkey not in comp_obj else comp_obj[abkey] 
     refs.extend(busint_alt_refs)
     comp_obj[abkey] = [NoIndent(o) for o in refs]
     
-
     if debug:
         block_obj = [
             ('portGroups', portgroup_objs),
@@ -339,6 +421,7 @@ def dump_json_bundles(
     bundle_obj_map = {}
     bnames = set()
     for i, bundle in enumerate(bundles): 
+        refname = 'bundle-{}'.format(bundle.name)
         o = {
             'name': bundle.name,
             'interfaceMode': None,
@@ -349,8 +432,8 @@ def dump_json_bundles(
             }], 
         }
         bundle_objs.append(o)
-        bundle_refs.append(ref_from_name(bundle.name))
-        bundle_obj_map[bundle.name] = o
+        bundle_refs.append(ref_from_name(refname))
+        bundle_obj_map[refname] = o
         # bundle names must be unique
         assert bundle.name not in bnames
         bnames.add(bundle.name)

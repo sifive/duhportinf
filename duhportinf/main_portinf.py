@@ -262,12 +262,10 @@ def main():
         assert os.path.isdir(args.duh_bus), '{} not a directory'.format(args.duh_bus)
         duh_bus_path = args.duh_bus
 
-    with open(args.component_json5) as fin:
-        block = json5.load(fin)
-        block = JsonRef.replace_refs(block)
-    all_ports = util.format_ports(block['component']['model']['ports'])
+    unassn_ports = util.get_unassigned_ports(args.component_json5)
     bus_defs = load_bus_defs(duh_bus_path)
-    i_bus_mappings = get_bus_matches(all_ports, bus_defs)
+    logging.info('mapping {} unassigned ports'.format(len(unassn_ports)))
+    i_bus_mappings = get_bus_matches(unassn_ports, bus_defs)
     util.dump_json_bus_candidates(
         args.output,
         args.component_json5,
