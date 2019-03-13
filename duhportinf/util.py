@@ -334,7 +334,7 @@ def dump_json_bus_candidates(
             o = {
                 'name': interface.prefix.strip('_'),
                 'interfaceMode': bm.bus_def.driver_type,
-                'busType': bm.bus_def.abstract_type,
+                'busType': bm.bus_def.bus_type,
                 'abstractionTypes': [{
                     'viewRef': 'RTLview',
                     'portMaps': portmap_o if not debug else debug_portmap_o,
