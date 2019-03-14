@@ -261,9 +261,9 @@ def dump_json_bus_candidates(
         o = [
             ('num_ports', interface.size),
             ('prefix', prefix),
-            ('cost', round(float(bm.cost.value), 2)),
-            ('cost-dir-mismatch', int(bm.cost.dc)),
-            ('cost-width-mismatch', int(bm.cost.wc)),
+            #('cost', round(float(bm.cost.value), 2)),
+            ('num-direction-mismatch', int(bm.cost.dc)),
+            ('num-width-mismatch', int(bm.cost.wc)),
         ]
         return o
 
