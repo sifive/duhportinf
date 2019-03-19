@@ -252,7 +252,7 @@ class Grouper(unittest.TestCase):
         bt = _bundle.BundleTree(ports)
         for nid, inter in bt.get_initial_interfaces():
             # for each port group, only pair the 5 bus defs with the lowest fcost
-            l_fcost = next(iter(main_portinf._get_lfcost_bus_defs(inter, self.bus_defs)))[0]
+            l_fcost = next(iter(main_portinf._get_low_fcost_bus_defs(inter, self.bus_defs)))[0]
             nid_cost_map[nid] = l_fcost
         optimal_nids = bt.get_optimal_nids(nid_cost_map)
         # there should be at least one optimal nid yielded for mapping
@@ -323,9 +323,66 @@ class Fcost(unittest.TestCase):
             ),
             self.mem_bus_defs,
         ))
-        fcost = _optimize.get_mapping_fcost(interface, dpram_master_bd)
+        fcost = _optimize.get_mapping_fcost_global(interface, dpram_master_bd)
         self.assertEqual(fcost.dc, 1)
         self.assertEqual(fcost.wc, 2)
+        
+    def test_multi_prefixgroup(self):
+        # ensure that bus def candidates that match better locally (a
+        # subset of ports within a portgroup) also show up with low fcost
+        # scores
+        def get_bd(tag, ports):
+            return BusDef(tag, {}, 'master', ports, [])
+        corr_bd1_reqports = [
+            ('ready', 1, -1),
+            ('valid', 1, 1),
+            ('data', 1, 1),
+        ]
+        corr_bd2_reqports = [
+            ('blockalign', 1, 1),
+            ('ctrl', 1, -1),
+            ('burst', 1, -1),
+        ]
+        incorr_bd_reqports = [
+            ('complete', 1, 1),
+            ('and',      1, 1),
+            ('utter',    1, 1),
+            ('garbage',  1, -1),
+            ('ports',    1, -1),
+            ('not',      1, -1),
+            ('to',       1, 1),
+            ('map',      1, 1),
+        ]
+        corr_bd1 = get_bd('corr1', corr_bd1_reqports)
+        corr_bd2 = get_bd('corr2', corr_bd2_reqports)
+
+        # stuff with wider interface bus definitions that is a better
+        # match globally for the combined ports
+        bds = [get_bd('incorr', incorr_bd_reqports) for _ in range(10)]
+        # include correct bus defs that should match better locally
+        bds.append(corr_bd1)
+        bds.append(corr_bd2)
+
+        # portgroup that should correctly map to two narrower bus
+        # definitions
+        interface = _bundle.Interface([
+            ('pl_ready', 1, -1),
+            ('pl_valid', 1, 1),
+            ('pl_data', 1, 1),
+            ('pl_blockalign', 1, 1),
+            ('pl_ctrl', 1, -1),
+            ('pl_burst', 1, -1),
+        ], [],)
+
+        i_bus_defs = main_portinf._get_low_fcost_bus_defs(interface, bds)
+        sel_bus_defs = [bd for _, bd in i_bus_defs]
+        #print('all tags', [bd.bus_type for bd in bds])
+        #print('sel tags', [(str(c), bd.bus_type) for c, bd in i_bus_defs])
+
+        # check that the correct candidate bus definitions show up in
+        # fcost computation
+        self.assertTrue(corr_bd1 in sel_bus_defs)
+        self.assertTrue(corr_bd2 in sel_bus_defs)
 
     def tearDown(self):
         pass
@@ -423,7 +480,7 @@ class BusMapping(unittest.TestCase):
         self.assertEqual(bm.bus_def.driver_type, 'slave')
         self.assertTrue(set(bm.m.items()).issubset(true_mappings))
         self.assertEqual(len(bm.sbm), 0)
-        
+
     def tearDown(self):
         pass
 

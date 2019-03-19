@@ -145,11 +145,19 @@ def get_jaccard_dist(n1, n2):
 
 def get_num_missing_tokens(n1, n2):
     """"
-    return fraction of tokens in n1 present in the tokens of n2
+    return number of tokens in n1 that are not present in the tokens of n2
     """
     n1t = set(get_tokens(n1))
     n2t = set(get_tokens(n2))
     return len(n1t - n2t)
+
+def get_frac_missing_tokens(n1, n2):
+    """"
+    return fraction of tokens in n1 that are not present in the tokens of n2
+    """
+    n1t = set(get_tokens(n1))
+    n2t = set(get_tokens(n2))
+    return len(n1t - n2t) / len(n1t)
 
 def get_id_gen():
     i = 0

@@ -10,7 +10,12 @@ import argparse
 import subprocess
 import logging
 from .busdef import BusDef
-from ._optimize import map_ports_to_bus, get_mapping_fcost, MatchCost
+from ._optimize import (
+    map_ports_to_bus,
+    get_mapping_fcost_global,
+    get_mapping_fcost_local,
+    MatchCost,
+)
 from ._bundle import BundleTree
 from . import busdef
 from . import util
@@ -42,15 +47,24 @@ def load_bus_defs(rootdir):
     ))
     return bus_defs
 
-
-def _get_lfcost_bus_defs(interface, bus_defs, penalize_umap=True):
-    return list(sorted(
-        [(
-            get_mapping_fcost(interface, bus_def, penalize_umap), 
-            bus_def,
-        ) for bus_def in bus_defs],
-        key=lambda x:x[0].value,
-    ))
+def _get_low_fcost_bus_defs(interface, bus_defs):
+    def get_sorted_fcosts(fcost_func):
+        return list(sorted(
+            [(
+                fcost_func(interface, bus_def),
+                bus_def,
+            ) for bus_def in bus_defs],
+            key=lambda x:x[0].value,
+        ))
+    fcosts_global = get_sorted_fcosts(get_mapping_fcost_global)
+    fcosts_local  = get_sorted_fcosts(get_mapping_fcost_local)
+    # only include local matches if they don't appear in global
+    top_global_bds = set([bd for _, bd in fcosts_global[:5]])
+    fcosts_local = [
+        (c, bd) for c, bd in fcosts_local[:4]
+            if bd not in top_global_bds
+    ]
+    return fcosts_global[:5] + fcosts_local
 
 def _get_bus_pairings(bt, bus_defs):
     # pass over all initial port groups and compute fcost to prioritize
@@ -61,8 +75,8 @@ def _get_bus_pairings(bt, bus_defs):
     nid_cost_map = {}
 
     for nid, interface in bt.get_initial_interfaces():
-        # for each port group, only pair the 5 bus defs with the lowest fcost
-        i_bus_defs = _get_lfcost_bus_defs(interface, bus_defs)[:5]
+        # for each port group, only pair with the lowest fcost bus defs
+        i_bus_defs = _get_low_fcost_bus_defs(interface, bus_defs)
 
         l_fcost = i_bus_defs[0][0]
         # NOTE direction seems to be the only really informative metric for
@@ -126,75 +140,6 @@ def _get_initial_bus_matches(bt, i_bus_pairings):
     ), key=lambda x: x[1]))
 
     return opt_i_bus_mappings
-
-def _map_residual(interface, _src_bm, bus_defs):
-    """
-    map flat port group against bus_defs and assign sideband signals
-    optimally amongst the new bus_mappings and the input src bus mapping
-
-    NOTE not used right now
-    NOTE residual must be in the form of Interface (presumeably with some
-    ports removed from the source)
-    """
-    src_bm = BusMapping.duplicate(_src_bm)
-    i_bus_defs = _get_lfcost_bus_defs(
-        interface,
-        bus_defs,
-        penalize_umap=False,
-    )[:30]
-    bus_mappings = list(sorted([
-        map_ports_to_bus(interface, bus_def, penalize_umap=False) 
-        for fcost, bus_def in i_bus_defs
-    ], key=lambda bm: bm.cost))
-    
-    # greedily accept new bus mappings in which bus_def.req_ports have not
-    # already been accepted
-    assn_ports = set()
-    sel_bus_mappings = [src_bm]
-    for bm in bus_mappings:
-        mapped_ports = set(bm.mapping.keys())
-        # skip if any mapped ports have already been assigned
-        if len(mapped_ports & assn_ports) > 0:
-            continue
-        sel_bus_mappings.append(bm)
-        assn_ports |= mapped_ports
-    
-    def get_port_cost(port, bm):
-        umap = (port in bm.sbm and bm.sbm[port] == None)
-        sb_map = (port in bm.sbm and bm.sbm[port] != None)
-        prim_map = (port in bm.m)
-        return (
-            not prim_map,
-            umap,
-            MatchCost.zero() if not sb_map else bm.mc_func(port, bm.sbm[port]),
-            MatchCost.zero() if not prim_map else bm.mc_func(port, bm.m[port]),
-        )
-    
-    # assign src sideband ports to best possible destination
-    # if none of the selected bus mappings map it is a primary port, pick
-    # the sideband mapping with the lowest cost
-    port_bmcosts = defaultdict(list)
-    mapping_ports = interface.get_ports_to_map()
-    for port in mapping_ports:
-        port_bmcosts[port].append(
-            (get_port_cost(port, src_bm), src_bm)
-        )
-    for bm in sel_bus_mappings:
-        for port in mapping_ports:
-            port_bmcosts[port].append(
-                (get_port_cost(port, bm), bm)
-            )
-    for port in mapping_ports:
-        _, sel_bm = min(port_bmcosts[port], key=lambda x: x[0])
-        # remove port from sideband designation in the rest of the bus mappings
-        for bm in sel_bus_mappings:
-            if bm != sel_bm:
-                assert port not in bm.mapping, \
-                    "port can only be assigned to one primary mapping"
-                del bm.sbm[port]
-                
-    return list(sorted(sel_bus_mappings, key=lambda bm: bm.cost))
-
 
 def get_bus_matches(ports, bus_defs):
     bt = BundleTree(ports)

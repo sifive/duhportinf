@@ -10,7 +10,7 @@ from . import util
 solvers.options['show_progress'] = False
 solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
-def _get_name_fcost(interface, bus_def):
+def _get_port_words(interface, bus_def):
     dup_words = get_dup_words(interface.ports)
     # get tokens for all port names (less duplicate words appearing in all
     # signals) and bus def logical names and return jaccard distance as a
@@ -23,13 +23,38 @@ def _get_name_fcost(interface, bus_def):
         bus_def.words_from_name(p[0])
         for pp in [bus_def.req_ports, bus_def.opt_ports] for p in pp
     ]))
+    return p_words, b_words
+
+def _get_name_fcost1(interface, bus_def):
+    p_words, b_words = _get_port_words(interface, bus_def)
     return util.get_jaccard_dist(p_words, b_words)
 
-def get_mapping_fcost(interface, bus_def, penalize_umap=True):
+def _get_name_fcost2(interface, bus_def):
+    p_words, b_words = _get_port_words(interface, bus_def)
+    return util.get_frac_missing_tokens(b_words, p_words)
+
+def get_mapping_fcost_global(interface, bus_def):
     """
-    coarse cost function to cheaply estimate how good a potential mapping
-    will be
+    coarse cost function to cheaply estimate global (full set of ports)
+    interface match to bus_def
     """
+    cost = _get_mapping_fcost_base(interface, bus_def, penalize_umap=True) 
+    name_cost = _get_name_fcost1(interface, bus_def)
+    cost.nc = name_cost*interface.size
+    return cost
+
+def get_mapping_fcost_local(interface, bus_def):
+    """
+    coarse cost function to cheaply estimate local (subset of ports)
+    interface match to bus_def
+    """
+    cost = _get_mapping_fcost_base(interface, bus_def, penalize_umap=False) 
+    name_cost = _get_name_fcost2(interface, bus_def)
+    cost.nc = name_cost
+    return cost
+
+def _get_mapping_fcost_base(interface, bus_def, penalize_umap=True):
+
     def sum_across(keys, cnts):
         return sum([cnts[k] for k in keys])
 
@@ -100,10 +125,6 @@ def get_mapping_fcost(interface, bus_def, penalize_umap=True):
         if penalize_umap:
             cost += MatchCost(0,1,1)*ppc
 
-    # determine name compatibility
-    name_cost = _get_name_fcost(interface, bus_def)
-    cost.nc = name_cost*len(ports)
-    
     return cost
 
 def map_ports_to_bus(interface, bus_def, penalize_umap=True):
@@ -258,8 +279,8 @@ def get_cost_funcs(interface, bus_def):
         return MatchCost(
             # name attr mismatch
             cost_n,
-            # width mismatch (both being None does *not* count as a match)
-            (phy_port[1] != bus_port[1]) or phy_port[1] == None,
+            # width mismatch (either being None does *not* count as a match)
+            (phy_port[1] != bus_port[1]) and (None not in [phy_port[1], bus_port[1]]),
             # direction mismatch
             (phy_port[2] != bus_port[2]),
         )
