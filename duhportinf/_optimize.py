@@ -1,7 +1,7 @@
 import numpy as np
 import operator
 import cvxopt
-from collections import Counter
+from collections import Counter, defaultdict
 from cvxopt import matrix, solvers
 from cvxopt.modeling import variable, dot, op
 from cvxopt.modeling import sum as cvx_sum
@@ -191,10 +191,18 @@ def map_ports_to_bus(interface, bus_def, penalize_umap=True):
     for p in sideband_ports:
         if p in mapping:
             del mapping[p]
+    # assign sideband signals to user groups if they are specified
+    user_group_mapping, unmapped_ports = get_user_group_assignment(
+        interface,
+        sideband_ports,
+        bus_def,
+    )
 
     bus_mapping = BusMapping(
         mapping = mapping,
         sideband_mapping = sideband_mapping,
+        user_group_mapping = user_group_mapping,
+        unmapped_ports = unmapped_ports,
         match_cost_func = match_cost_func,
         bus_def = bus_def,
     )
@@ -268,7 +276,6 @@ def get_cost_funcs(interface, bus_def):
     """
     determine cost functions in a closure with access to bus_def
     """ 
-
     dup_words = get_dup_words(interface.ports)
     def match_cost_func(phy_port, bus_port):
 
@@ -302,7 +309,11 @@ def get_cost_funcs(interface, bus_def):
     return match_cost_func, mapping_cost_func
 
 def get_sideband_ports(mapping, ports, bus_def, match_cost_func):
-
+    """
+    tag ports that are either not mapped or whose name match score is poor
+    as compared to the rest of the mapped ports.  these are most likely
+    user defined signals.
+    """
     # designate phy ports as sideband based on the number of tokens from
     # the bus_def port that are missing from the tokens in the mapped phy
     # port
@@ -326,6 +337,39 @@ def get_sideband_ports(mapping, ports, bus_def, match_cost_func):
     
     return sideband_ports
 
+def get_user_group_assignment(interface, ports, bus_def):
+    """
+    assign ports to the appropriate most appropriate user group of the
+    busdef
+    """
+    # strip shared prefix between ports for determing user group
+    # assignment
+    sprefix = interface.prefix
+    bd_user_port_groups = bus_def.user_port_groups
+    if len(bd_user_port_groups) == 0:
+        return {}, ports
+
+    def get_user_group_port(port):
+        # return the port of the user group with the prefix match nearest
+        # to the root of the given port name
+        for w in util.words_from_name(port[0][len(sprefix):]):
+            for prefix, uport in bd_user_port_groups:
+                # prefix *and* direction must match to be assigned to a group
+                if w.startswith(prefix) and port[2] == uport[2]:
+                    return uport
+        return None
+
+    user_group_mapping = defaultdict(list)
+    for port in ports:
+        uport = get_user_group_port(port)
+        user_group_mapping[uport].append(port)
+
+    # all ports not assigned to a valid user group are considered unmapped
+    umap_ports = user_group_mapping[None]
+    del user_group_mapping[None]
+
+    return user_group_mapping, umap_ports
+
 # FIXME should probably have proper accessors to prevent errors in
 # mutating state
 class BusMapping(object):
@@ -343,19 +387,23 @@ class BusMapping(object):
             cost             = MatchCost.duplicate(bm.cost),
             mapping          = dict(bm.mapping),
             sideband_mapping = dict(bm.sideband_mapping),
+            user_group_mapping = dict(bm.user_group_mapping),
+            unmapped_ports = set(bm.unmapped_ports),
             match_cost_func  = bm.match_cost_func,
             bus_def          = bm.bus_def,
             fcost            = MatchCost.duplicate(bm.fcost),
         )
 
     def __init__(self, **kwargs):
-        self.cost              = None
-        self.mapping           = None
-        self.sideband_mapping  = None
-        self.match_cost_func   = None
+        self.cost               = None
+        self.mapping            = None
+        self.sideband_mapping   = None
+        self.user_group_mapping = None
+        self.unmapped_ports     = None
+        self.match_cost_func    = None
         #self.mapping_cost_func = None
-        self.bus_def           = None
-        self.fcost             = None
+        self.bus_def            = None
+        self.fcost              = None
         for k, v in kwargs.items():
             assert hasattr(self, k), \
                 'invalid kwargs {} for BusMapping'.format(k)

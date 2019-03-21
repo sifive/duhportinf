@@ -2,6 +2,7 @@ import numpy as np
 import json5
 import logging
 from collections import defaultdict
+from itertools import combinations
 from ._optimize import MatchCost
 from . import util
 
@@ -46,16 +47,44 @@ class BusDef(object):
         
         master_req_ports = []
         master_opt_ports = []
+        master_user_port_groups = []
         slave_req_ports = []
         slave_opt_ports = []
+        slave_user_port_groups = []
         
+        user_groups = []
         for portname, portdef in spec[adkey]['ports'].items():
-            req_port_map, opt_port_map = cls.parse_port(portname, portdef)
+            (
+                is_user,
+                user_group, 
+                req_port_map, 
+                opt_port_map,
+            ) = cls.parse_port(portname, portdef)
+            if is_user:
+                user_groups.append(user_group)
             if 'onMaster' in req_port_map: master_req_ports.append(req_port_map['onMaster'])
-            if 'onMaster' in opt_port_map: master_opt_ports.append(opt_port_map['onMaster'])
-            if 'onSlave'  in req_port_map: slave_req_ports.append(req_port_map['onSlave'])
-            if 'onSlave'  in opt_port_map: slave_opt_ports.append(opt_port_map['onSlave'])
+            if 'onMaster' in opt_port_map: 
+                if is_user:
+                    master_user_port_groups.append((user_group, opt_port_map['onMaster']))
+                else:
+                    master_opt_ports.append(opt_port_map['onMaster'])
+            if 'onSlave' in req_port_map: slave_req_ports.append(req_port_map['onSlave'])
+            if 'onSlave' in opt_port_map: 
+                if is_user:
+                    slave_user_port_groups.append((user_group, opt_port_map['onSlave']))
+                else:
+                    slave_opt_ports.append(opt_port_map['onSlave'])
         
+        if len(user_groups) > 1:
+            # cannot have an anonymous ('') user group if there is more
+            # than one specified
+            assert not any([g == '' for g in user_groups])
+            prefix_match = False
+            for p1, p2 in combinations(user_groups, 2):
+                prefix_match |= (p1.startswith(p2) or p2.startswith(p1))
+            assert not prefix_match, \
+                "ambiguous user_groups specified:{}".format(user_groups)
+
         bus_defs = []
         if master_req_ports != []:
             bus_defs.append(
@@ -65,6 +94,7 @@ class BusDef(object):
                     'master',
                     master_req_ports,
                     master_opt_ports,
+                    master_user_port_groups,
                 )
             )
         if slave_req_ports != []:
@@ -75,6 +105,7 @@ class BusDef(object):
                     'slave',
                     slave_req_ports,
                     slave_opt_ports,
+                    slave_user_port_groups,
                 )
             )
         return bus_defs
@@ -90,6 +121,10 @@ class BusDef(object):
             "required keys missing in description of port {}".format(portname)
         req_port_map = defaultdict(lambda: None)
         opt_port_map = defaultdict(lambda: None)
+
+        is_user = 'isUser' in portdef and portdef['isUser']
+        user_group = '' if 'group' not in portdef else portdef['group'].lower()
+
         for type_key in ['onMaster', 'onSlave']:
             if type_key not in portdef['wire']:
                 continue
@@ -127,7 +162,12 @@ class BusDef(object):
             else:
                 opt_port_map[type_key] = desc
                 
-        return req_port_map, opt_port_map
+        return (
+            is_user,
+            user_group,
+            req_port_map,
+            opt_port_map,
+        )
     
     @property
     def num_req_ports(self): return len(self._req_ports)
@@ -137,6 +177,8 @@ class BusDef(object):
     def req_ports(self): return list(self._req_ports)
     @property
     def opt_ports(self): return list(self._opt_ports)
+    @property
+    def user_port_groups(self): return list(self._user_port_groups)
     @property
     def all_ports(self): 
         l = list(self._req_ports)
@@ -170,12 +212,15 @@ class BusDef(object):
         driver_type,
         req_ports,
         opt_ports,
+        user_port_groups,
     ):
         self.bus_type      = bus_type
         self.abstract_type = abstract_type
         self.driver_type   = driver_type
         self._req_ports    = req_ports
         self._opt_ports    = opt_ports
+        # prefixes must all be lowercase
+        self._user_port_groups = [(p.lower(), pp) for p, pp in user_port_groups]
 
 #--------------------------------------------------------------------------
 # debug

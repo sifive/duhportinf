@@ -332,7 +332,7 @@ class Fcost(unittest.TestCase):
         # subset of ports within a portgroup) also show up with low fcost
         # scores
         def get_bd(tag, ports):
-            return BusDef(tag, {}, 'master', ports, [])
+            return BusDef(tag, {}, 'master', ports, [], [])
         corr_bd1_reqports = [
             ('ready', 1, -1),
             ('valid', 1, 1),
@@ -441,7 +441,6 @@ class BusMapping(unittest.TestCase):
         self.assertTrue(set(bm.m.items()).issubset(true_mappings))
         self.assertTrue(set(bm.sbm.keys()).issubset(true_sideband_ports))
 
-
     def test_sifive_core(self):
         true_mappings = set([
             (('front_port_axi4_0_ar_bits_id', 8, 1), ('ARID', None, 1)),
@@ -481,23 +480,73 @@ class BusMapping(unittest.TestCase):
         self.assertTrue(set(bm.m.items()).issubset(true_mappings))
         self.assertEqual(len(bm.sbm), 0)
 
+    def test_assign_user_group_ports(self):
+        answer_user_group_map = {
+            'AR':[
+                ("axi0_AR_PARITY_EN", 1, 1),
+                ("axi0_AR_PARITY",    2, 1),
+                ("axi0_ARAPCMD",      1, 1),
+            ],
+            'AW':[
+                ("axi0_AW_PARITY",    1, 1), 
+                ("axi0_AW_PARITY_EN", 1, -1), 
+                ("axi0_AWCOBUF",      3, 1), 
+                ("axi0_AWAPCMD",      1, 1), 
+                ("axi0_AWALLSTRB",    4, 1), 
+            ],
+            'W':[
+                ("axi0_WDATA_PARITY", 1, 1),
+                ("axi0_WCTRL_PARITY", 4, 1),
+                ("axi0_WPARITY_EN",   1, 1),
+            ],
+            'B':[
+                ("axi0_BPARITY",    1, 1),
+                ("axi0_BPARITY_EN", 1, 1),
+            ],
+            'R':[
+                ("axi0_RDATA_PARITY", 1, 1),
+                ("axi0_RCTRL_PARITY", 1, -1),
+                ("axi0_RPARITY_EN",   1, 1),
+            ],
+        }
+        all_ports = [p for pp in answer_user_group_map.values() for p in pp]
+        # all user groups facing +1 direction, so the ports facing -1 direction
+        # should end up as unmapped
+        answer_umap_ports = set([p for p in all_ports if p[2] == -1])
+
+        interface = _bundle.Interface(all_ports, [])
+        user_groups = [(k, (k, None, 1)) for k in answer_user_group_map.keys()]
+        bus_def = BusDef(
+            {}, {}, 'master', [], [], 
+            # user group channels
+            user_groups,
+        )
+        user_group_map, umap_ports = _optimize.get_user_group_assignment(
+            interface,
+            all_ports,
+            bus_def,
+        )
+        total_groups = 0
+        for uport, ports in user_group_map.items():
+            if uport == None:
+                continue
+            total_groups += 1
+            self.assertEqual(
+                set(answer_user_group_map[uport[0]]) - set(umap_ports), 
+                set(ports),
+            )
+        self.assertEqual(total_groups, len(answer_user_group_map))
+        self.assertEqual(
+            set(umap_ports),
+            answer_umap_ports,
+        )
+
     def tearDown(self):
         pass
 
 #--------------------------------------------------------------------------
 # helpers
 #--------------------------------------------------------------------------
-# quick function to shrink full mappings to smaller ones for test bus defs
-def _filt_inputs(input_mappings, bus_defs):
-    all_bd_portnames = set([p[0] for bd in bus_defs for p in bd.all_ports])
-    filt_mappings = filter(
-        lambda x: x[1][0] in all_bd_portnames,
-        input_mappings,
-    )
-    print('filtered')
-    for x in filt_mappings:
-        print('{},'.format(x))
-
 # load test bus defs
 def _load_test_bus_defs():
     bus_defs = []

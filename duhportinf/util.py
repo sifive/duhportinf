@@ -269,7 +269,6 @@ def dump_json_bus_candidates(
         o = [
             ('num_ports', interface.size),
             ('prefix', prefix),
-            #('cost', round(float(bm.cost.value), 2)),
             ('num-direction-mismatch', int(bm.cost.dc)),
             ('num-width-mismatch', int(bm.cost.wc)),
         ]
@@ -317,16 +316,29 @@ def dump_json_bus_candidates(
                 bm.m.items(),
                 key=lambda x: bm.match_cost_func(x[0], x[1]),
             ))
+
             # format portmap object
             portmap_o = {}
             portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_ports})
-            portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_sideband_ports})
             # expand vectors in output
             portmap_o = {
                 bpn : expand_if_vector(interface, ppn) for bpn, ppn in portmap_o.items()
             }
-            if len(sbm_umap) > 0:
-                portmap_o['__UMAP__'] = [p[0] for p in sbm_umap]
+            # add user group ports
+            for uport, ports in sorted(bm.user_group_mapping.items()):
+                pp = [expand_if_vector(interface, p[0]) for p in ports]
+                portmap_o.update({uport[0]:pp})
+            # any ports that aren't map to normal busdef {req,opt} port or
+            # a busdef specified user group are unmapped
+            if len(bm.unmapped_ports) > 0:
+                portmap_o['__UMAP__'] = [
+                    expand_if_vector(interface, p[0]) for p in bm.unmapped_ports
+                ]
+            # FIXME remove old
+            # provide best guess mapping for sideband signals
+            #portmap_o.update({bp[0]:pp[0] for pp, bp in mapped_sideband_ports})
+            #if len(sbm_umap) > 0:
+            #    portmap_o['__UMAP__'] = [p[0] for p in sbm_umap]
 
             # format debug portmap object that tags req, opt, sideband signals
             req_mapped_names = [NoIndent((bp[0], pp[0])) for pp, bp in mapped_ports if bp in bm.bus_def.req_ports]
