@@ -261,20 +261,19 @@ class BundleTree(object):
         return interfaces for all bundle tree nodes that meet min and max
         size filter
         """
-        # only expose leaves at root node (the "rest" of the ungrouped
-        # ports) when at the rootnode
+        # if the root is large (>= 100 ports), then only expose only
+        # leaves at root node (the "rest" of the ungrouped ports) 
         root_leaves = list(filter(lambda n: n.is_leaf, self._root_node.children))
-        root_interface = Interface.merge(*[n.interface for n in root_leaves])
+        abbr_root_interface = Interface.merge(*[n.interface for n in root_leaves])
         rootnid = self._root_node.id
 
         for nid, interface in pre_order_n(
             self._root_node, 
             lambda n: (n.id, n.interface),
         ):
-            if nid == rootnid and root_interface.size > 0:
-                yield nid, root_interface
+            if nid == rootnid and interface.size >= 100:
+                yield nid, abbr_root_interface
             elif (
-                (nid != rootnid) and
                 (interface.size >= min_size) and
                 (max_size is None or interface.size <= max_size)
             ):

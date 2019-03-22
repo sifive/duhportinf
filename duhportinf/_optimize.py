@@ -380,6 +380,8 @@ class BusMapping(object):
     def sbm(self): return self.sideband_mapping
     @property
     def mc_func(self): return self.match_cost_func
+    @property
+    def umap(self): return self.unmapped_ports
 
     @classmethod
     def duplicate(cls, bm):
