@@ -1,8 +1,9 @@
 # DUH inference package
 
-The DUH inference package includes tools for inferring mappings of ports
-to known bus defintions that are maintained in
-[duh-bus][db].
+The DUH inference package includes tools for inferring mappings of ports to
+known bus defintions that are maintained in [duh-bus][db].  
+
+Details of the implementation are included in an [overview](overview.md)
 
 ## Install
 
@@ -25,7 +26,8 @@ line using `-b`.
 ## Run
 
 This package includes two stand-alone command line programs for
-elaborating a component of design object desribed in a [duh-document](FIXME).
+elaborating a component or design object desribed in a
+[duh-document][ddoc].
 
 ### duh-portinf 
 
@@ -85,4 +87,5 @@ duh-document object:
   `"busType"` is specified as `"bundle"`.
 
 [db]: https://github.com/sifive/duh-bus
+[ddoc]: https://github.com/sifive/duh/tree/master/doc
 
