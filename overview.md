@@ -130,11 +130,19 @@ above prefix tree would be restructured:
 ##### 4) Passthrough node removal
 
 Nodes that have only a single child are then flattened to remove
-unnecessary hierarchy.  However, a node can only be removed as a
-passthrough if its child node does not correspond to a token that exists
-one level up in the hierarchy.  In the above example, the node
-corresponding to "diff" in `int_bar_diff_baz` is a passthrough, but the node
-corresponding to "sub" in `int_bar_sub_1` is not since `int_bar_1` exists.
+unnecessary hierarchy.  In the example, the node corresponding to "diff"
+in `int_bar_diff_baz` and the node corresponding to "sub" in
+`int_bar_sub_1` are both passthroughs.  Flattening of a node means that
+its name is emended to include that of the child node, and the child node
+is skipped over:
+```
+           int____________________
+          /           \           \
+       foo(v)         bar_______  test*
+          |          /   \      \
+  ['1', '2', '3']*  1*  sub_1*  diff_baz*
+```
+
 
 ## Initial bus interface search
 
