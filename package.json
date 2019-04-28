@@ -27,6 +27,6 @@
   },
   "homepage": "https://github.com/sifive/duhportinf#readme",
   "dependencies": {
-    "duh-bus": "sifive/duh-bus"
+    "duh-bus": "^0.1.0"
   }
 }

@@ -8,3 +8,5 @@ dist
 docker-compose.yml
 pylib
 node_modules
+package-lock.json
+local-pylib-requirements.txt
