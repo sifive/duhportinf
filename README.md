@@ -1,3 +1,5 @@
+[![NPM version](https://img.shields.io/npm/v/duhportinf.svg)](https://www.npmjs.org/package/duhportinf)
+
 # DUH inference package
 
 The DUH inference package includes tools for inferring mappings of ports to
@@ -10,7 +12,7 @@ Details of the implementation are included in an [overview](overview.md)
 Install using `npm` ([duh-bus][db] automatically installed):
 
 ```console
-npm i sifive/duhportinf
+npm i duhportinf
 ```
 
 *or* install using `pip`:
@@ -29,7 +31,7 @@ This package includes two stand-alone command line programs for
 elaborating a component or design object desribed in a
 [duh-document][ddoc].
 
-### duh-portinf 
+### duh-portinf
 
 `duh-portinf` first groups ports described in a duh-document into proposed
 portgroups.  These portgroups are then subsequently mapped against a bank
@@ -49,7 +51,7 @@ duh-document object:
   for each portgroup.  
 
 * `obj["definitions"]["busDefinitions"]`: All referenced bus interface
-  dictionaries. 
+  dictionaries.
 
 * `obj["definitions"]["busMappedPortGroups"]`: A list of objects
   containing debug information for each portgroup.
@@ -88,4 +90,3 @@ duh-document object:
 
 [db]: https://github.com/sifive/duh-bus
 [ddoc]: https://github.com/sifive/duh/tree/master/doc
-
