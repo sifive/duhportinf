@@ -1,6 +1,6 @@
 {
   "name": "duhportinf",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "library to match flat named port list to library of bus specifications",
   "scripts": {
     "preinstall": ".npm-install/check-py.sh",
