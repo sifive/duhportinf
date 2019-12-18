@@ -38,7 +38,7 @@ def get_mapping_fcost_global(interface, bus_def):
     coarse cost function to cheaply estimate global (full set of ports)
     interface match to bus_def
     """
-    cost = _get_mapping_fcost_base(interface, bus_def, penalize_umap=True) 
+    cost = _get_mapping_fcost_base(interface, bus_def, penalize_umap=True)
     name_cost = _get_name_fcost1(interface, bus_def)
     cost.nc = name_cost*interface.size
     return cost
@@ -48,7 +48,7 @@ def get_mapping_fcost_local(interface, bus_def):
     coarse cost function to cheaply estimate local (subset of ports)
     interface match to bus_def
     """
-    cost = _get_mapping_fcost_base(interface, bus_def, penalize_umap=False) 
+    cost = _get_mapping_fcost_base(interface, bus_def, penalize_umap=False)
     name_cost = _get_name_fcost2(interface, bus_def)
     cost.nc = name_cost
     return cost
@@ -108,7 +108,7 @@ def _get_mapping_fcost_base(interface, bus_def, penalize_umap=True):
         num_dir_matched = min(ppc, brc)
         ppc -= num_dir_matched
         brc -= num_dir_matched
-        
+
         cost += MatchCost(0,1,0)*num_dir_matched
         # add harsh penalty for unmatched bus ports
         cost += MatchCost(0,1,1)*brc
@@ -169,12 +169,12 @@ def map_ports_to_bus(interface, bus_def, penalize_umap=True):
     if not is_satisfiable(X):
         X = _get_convex_opt_assignment(C)
         #assert is_satisfiable(X)
-    
+
     mapping = {ports1[i] : ports2[j] for i, j in np.argwhere(X)}
     if swap:
         mapping = {v:k for k, v in mapping.items()}
     sideband_ports = get_sideband_ports(
-        mapping, 
+        mapping,
         ports,
         bus_def,
         match_cost_func,
@@ -213,7 +213,7 @@ def map_ports_to_bus(interface, bus_def, penalize_umap=True):
     cost = MatchCost.normalize(cost, len(ports))
     bus_mapping.cost = cost
     return bus_mapping
-    
+
 def _get_greedy_assignment(C):
     # greedily select the lowest cost col port for each row port
     rsel = np.argmin(C, axis=1)
@@ -275,14 +275,14 @@ def get_dup_words(ports):
 def get_cost_funcs(interface, bus_def):
     """
     determine cost functions in a closure with access to bus_def
-    """ 
+    """
     dup_words = get_dup_words(interface.ports)
     def match_cost_func(phy_port, bus_port):
 
         p_words = set(util.words_from_name(phy_port[0])) - dup_words
         b_words = bus_def.words_from_name(bus_port[0])
         cost_n = util.get_jaccard_dist(p_words, b_words)
-        
+
         return MatchCost(
             # name attr mismatch
             cost_n,
@@ -291,7 +291,7 @@ def get_cost_funcs(interface, bus_def):
             # direction mismatch
             (phy_port[2] != bus_port[2]),
         )
-    
+
     # NOTE this function closure actually includes the match_cost_func defined
     # above
     def mapping_cost_func(bm, penalize_umap):
@@ -318,7 +318,7 @@ def get_sideband_ports(mapping, ports, bus_def, match_cost_func):
     # the bus_def port that are missing from the tokens in the mapped phy
     # port
     num_missing_tokens = [
-        util.get_num_missing_tokens(bp[0], pp[0]) 
+        util.get_num_missing_tokens(bp[0], pp[0])
         for pp, bp in mapping.items()
     ]
     # label mappings as sideband if they are missing more than 1 token
@@ -334,7 +334,7 @@ def get_sideband_ports(mapping, ports, bus_def, match_cost_func):
     # include unmapped ports as sideband as well
     umap_ports = set(ports) - set(mapping.keys())
     sideband_ports |= umap_ports
-    
+
     return sideband_ports
 
 def get_user_group_assignment(interface, ports, bus_def):
@@ -445,7 +445,7 @@ MAKE_RBINARY = lambda opfn : lambda self, other : MatchCost(
 )
 MAKE_COMPARATOR = lambda opfn : lambda self, other : opfn(self.value, other.value)
 
-class MatchCost(object):    
+class MatchCost(object):
     # cost weights
     NAME_W = 2
     WIDTH_W = 1
@@ -509,8 +509,8 @@ class MatchCost(object):
     @property
     def value(self):
         return (
-            self.NAME_W*self.nc + 
-            self.WIDTH_W*self.wc + 
+            self.NAME_W*self.nc +
+            self.WIDTH_W*self.wc +
             self.DIR_W*self.dc
         )
 
@@ -526,4 +526,3 @@ class MatchCost(object):
             self.wc,
             self.dc,
         )
-

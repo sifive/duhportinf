@@ -16,7 +16,7 @@ class dotdict(dict):
     __delattr__ = dict.__delitem__
 
 class BusDef(object):
-    
+
     @classmethod
     def is_spec_bus_def(cls, spec_path):
         if not spec_path.endswith('json5'):
@@ -32,7 +32,7 @@ class BusDef(object):
     @classmethod
     def bus_defs_from_spec(cls, spec_path):
         """
-        parse spec def and create the described slave+master bus interfaces 
+        parse spec def and create the described slave+master bus interfaces
         """
         with open(spec_path) as fin:
             spec = json5.load(fin)
@@ -44,37 +44,37 @@ class BusDef(object):
             'name'    : spec[adkey]['name'],
             'version' : spec[adkey]['version'],
         })
-        
+
         master_req_ports = []
         master_opt_ports = []
         master_user_port_groups = []
         slave_req_ports = []
         slave_opt_ports = []
         slave_user_port_groups = []
-        
+
         user_groups = []
         for portname, portdef in spec[adkey]['ports'].items():
             (
                 is_user,
-                user_group, 
-                req_port_map, 
+                user_group,
+                req_port_map,
                 opt_port_map,
             ) = cls.parse_port(portname, portdef)
             if is_user:
                 user_groups.append(user_group)
             if 'onMaster' in req_port_map: master_req_ports.append(req_port_map['onMaster'])
-            if 'onMaster' in opt_port_map: 
+            if 'onMaster' in opt_port_map:
                 if is_user:
                     master_user_port_groups.append((user_group, opt_port_map['onMaster']))
                 else:
                     master_opt_ports.append(opt_port_map['onMaster'])
             if 'onSlave' in req_port_map: slave_req_ports.append(req_port_map['onSlave'])
-            if 'onSlave' in opt_port_map: 
+            if 'onSlave' in opt_port_map:
                 if is_user:
                     slave_user_port_groups.append((user_group, opt_port_map['onSlave']))
                 else:
                     slave_opt_ports.append(opt_port_map['onSlave'])
-        
+
         if len(user_groups) > 1:
             # cannot have an anonymous ('') user group if there is more
             # than one specified
@@ -90,7 +90,7 @@ class BusDef(object):
             bus_defs.append(
                 BusDef(
                     bus_type,
-                    abstract_type, 
+                    abstract_type,
                     'master',
                     master_req_ports,
                     master_opt_ports,
@@ -101,7 +101,7 @@ class BusDef(object):
             bus_defs.append(
                 BusDef(
                     bus_type,
-                    abstract_type, 
+                    abstract_type,
                     'slave',
                     slave_req_ports,
                     slave_opt_ports,
@@ -109,7 +109,7 @@ class BusDef(object):
                 )
             )
         return bus_defs
-            
+
     @classmethod
     def parse_port(cls, portname, portdef):
         assert set([
@@ -134,7 +134,7 @@ class BusDef(object):
                     #'presence',
                     'direction',
                     #'width',
-                ]).issubset(set(subportdef.keys())) 
+                ]).issubset(set(subportdef.keys()))
                 or
                 ('presence' in subportdef and subportdef['presence'] == 'illegal')
             ), \
@@ -146,8 +146,8 @@ class BusDef(object):
                 # FIXME handle illegal separately
                 if subportdef['presence'] == 'illegal':
                     continue
-                
-            width = None 
+
+            width = None
             if 'width' in subportdef and type(subportdef['width']) == int:
                 width = subportdef['width']
             #direction = np.sign(-1) if subportdef['direction'] == 'in' else np.sign(1)
@@ -161,14 +161,14 @@ class BusDef(object):
                 req_port_map[type_key] = desc
             else:
                 opt_port_map[type_key] = desc
-                
+
         return (
             is_user,
             user_group,
             req_port_map,
             opt_port_map,
         )
-    
+
     @property
     def num_req_ports(self): return len(self._req_ports)
     @property
@@ -180,27 +180,27 @@ class BusDef(object):
     @property
     def user_port_groups(self): return list(self._user_port_groups)
     @property
-    def all_ports(self): 
+    def all_ports(self):
         l = list(self._req_ports)
         l.extend(self._opt_ports)
         return l
-    
+
     def words_from_name(self, port_name):
         attrs = [
             # FIXME there's a subtlety as to why this does not work well
             # need to figure thit out
-            #self.bus_type.name, 
-            #self.bus_type.library, 
+            #self.bus_type.name,
+            #self.bus_type.library,
             port_name,
         ]
         # split each attribute
         return [sw.lower() for w in attrs for sw in util.words_from_name(w)]
-    
+
     def __str__(self):
         return \
 'bus_def{{\n\tbus_type:{},\n\tabstract_type:{},\n\tdriver_type:{},\n\tnum_req:{},\n\tnum_opt:{},\n}}'.format(
             self.bus_type,
-            self.abstract_type, 
+            self.abstract_type,
             self.driver_type,
             self.num_req_ports,
             self.num_opt_ports,
@@ -208,7 +208,7 @@ class BusDef(object):
     def __init__(
         self,
         bus_type,
-        abstract_type, 
+        abstract_type,
         driver_type,
         req_ports,
         opt_ports,
@@ -236,12 +236,12 @@ def debug_bus_mapping(bm):
         [
             (
                 (
-                    bp in set(bm.bus_def.opt_ports), 
+                    bp in set(bm.bus_def.opt_ports),
                     bm.match_cost_func(pp, bp),
-                ), 
-                pp, 
+                ),
+                pp,
                 bp,
-            ) 
+            )
             for pp, bp in bm.mapping.items()
         ],
         key=lambda x: x[0],
@@ -259,12 +259,12 @@ def debug_bus_mapping(bm):
             (
                 (
                     bp == None,
-                    bp in set(bm.bus_def.opt_ports), 
+                    bp in set(bm.bus_def.opt_ports),
                     MatchCost(1,1,1,) if bp == None else bm.match_cost_func(pp, bp),
-                ), 
-                pp, 
+                ),
+                pp,
                 bp,
-            ) 
+            )
             for pp, bp in bm.sideband_mapping.items()
         ],
         key=lambda x: x[0],
@@ -277,7 +277,7 @@ def debug_bus_mapping(bm):
 
     # busports unmapped in either primary or sideband mapping
     umap_busports = (
-        set(bm.bus_def.req_ports) 
+        set(bm.bus_def.req_ports)
         - set(bm.mapping.values())
         - set(bm.sideband_mapping.values())
     )
@@ -287,4 +287,3 @@ def debug_bus_mapping(bm):
             debug_str += ('    - {}'.format(port))+'\n'
 
     return debug_str
-

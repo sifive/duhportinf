@@ -29,12 +29,12 @@ def main():
         '--debug',
         action='store_true',
         help='dump debug format',
-    
+
     )
     parser.add_argument(
         'component_json5',
         help='input component.json5 with port list of top-level module',
-    
+
     )
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
@@ -64,4 +64,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    

@@ -61,7 +61,7 @@ class Bundle(object):
 
 class BundleTreeNode(object):
     id_gen = util.get_id_gen()
-        
+
     @property
     def id(self): return self._id
     @property
@@ -76,11 +76,11 @@ class BundleTreeNode(object):
     def port(self): return self._port
     @property
     def passkey(self):
-        assert len(self) == 1 
+        assert len(self) == 1
         return next(iter(self.ptrs))
     @property
     def passthru(self):
-        assert len(self) == 1 
+        assert len(self) == 1
         return self.get_child(self.passkey)
     @property
     def is_leaf(self):
@@ -126,7 +126,7 @@ class BundleTreeNode(object):
         if cinter:
             self._interface = Interface.merge(self._interface, cinter)
         return self._interface
-        
+
     def __len__(self):
         return len(self._children_refs)
 
@@ -137,7 +137,7 @@ class BundleTreeNode(object):
             return False
         else:
             return self.passthru._is_singleton_path()
-    
+
     def is_passthru(self):
         return len(self) == 1 and not self.port and not self.is_vector
 
@@ -170,7 +170,7 @@ class BundleTreeNode(object):
 
     def __getitem__(self, ptr):
         return self._children_refs[ptr]
-        
+
     def get_child(self, ptr):
         return self._children_refs[ptr]
 
@@ -214,7 +214,7 @@ class BundleTreeNode(object):
             return d
 
 class BundleTree(object):
-    
+
     @property
     def tree(self): return self._root_node.as_dict()
     @property
@@ -223,7 +223,7 @@ class BundleTree(object):
     def size(self): return len(self._ports)
     @property
     def ports(self): return iter(self._ports)
-    
+
     def __init__(self, ports):
         self._ports = list(ports)
         self._root_node = BundleTreeNode()
@@ -236,8 +236,8 @@ class BundleTree(object):
         # if the first level is a trunk (single key), designate as name,
         # and pass thru the trunk to assign a new root
         if (
-            len(root) == 1 and 
-            self.size > 1 and 
+            len(root) == 1 and
+            self.size > 1 and
             not root.passthru.is_vector
         ):
             root_ptr = next(iter(root.ptrs))
@@ -251,7 +251,7 @@ class BundleTree(object):
         # do a post-order traversal that sets up the interfaces of each node
         # using the interface of the children
         pre_order_n(self._root_node, lambda n: n.set_interface())
-    
+
     def get_initial_interfaces(
         self,
         min_size=4,
@@ -262,13 +262,13 @@ class BundleTree(object):
         size filter
         """
         # if the root is large (>= 100 ports), then only expose only
-        # leaves at root node (the "rest" of the ungrouped ports) 
+        # leaves at root node (the "rest" of the ungrouped ports)
         root_leaves = list(filter(lambda n: n.is_leaf, self._root_node.children))
         abbr_root_interface = Interface.merge(*[n.interface for n in root_leaves])
         rootnid = self._root_node.id
 
         for nid, interface in pre_order_n(
-            self._root_node, 
+            self._root_node,
             lambda n: (n.id, n.interface),
         ):
             if nid == rootnid and interface.size >= 100:
@@ -282,7 +282,7 @@ class BundleTree(object):
     def get_optimal_nids(self, nid_cost_map, min_num_leaves=4):
         """
         return nids that are optimal for at least `min_num_leaves`
-        according to costs specified `nid_cost_map` 
+        according to costs specified `nid_cost_map`
         """
         ninfo = pre_order_n(self._root_node, lambda n: (n, n.is_leaf))
         leaf_nodes = [n for n, is_leaf in ninfo if is_leaf]
@@ -314,7 +314,7 @@ class BundleTree(object):
             if len(opt_nids) > 0:
                 break
         return opt_nids
-        
+
     def get_bundles(self):
         """
         return bundles for all non-leaf children of the root and a single
@@ -332,7 +332,7 @@ class BundleTree(object):
         root_tree = self._root_node.as_dict(name_only=True)
         filt_ptrs = [
             ptr
-            for ptr, n in self._root_node.children_refs 
+            for ptr, n in self._root_node.children_refs
                 if not n.is_leaf
         ]
         for ptr in filt_ptrs:
@@ -355,7 +355,7 @@ class BundleTree(object):
         for ptr, parent, child in zip(words, nodes, nodes[1:]):
             parent.add_child(ptr, child)
         return nodes[0]
-    
+
     def _format_vectors(self):
         """
         format vectors of the tree in place
@@ -425,7 +425,7 @@ def pre_order_n(
     stack = [node]
     def push(n): stack.append(n)
     def pop(): return stack.pop()
-    def peek(): return stack[-1] 
+    def peek(): return stack[-1]
     visited = set()
     preorder = []
     while len(stack) > 0:
@@ -446,4 +446,3 @@ def pre_order_n(
         visited.add(curr.id)
 
     return preorder
-

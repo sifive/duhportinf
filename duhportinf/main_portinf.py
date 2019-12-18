@@ -24,21 +24,21 @@ def get_bus_defs(spec_path):
     assert os.path.isfile(spec_path)
     assert BusDef.is_spec_bus_def(spec_path), \
         "{} does not describe a proper bus abstractionDefinition in JSON5".format(spec_path)
-    
+
     return BusDef.bus_defs_from_spec(spec_path)
 
 def load_bus_defs(rootdir):
     spec_paths = []
     for root, dirs, fnames in os.walk(rootdir):
-        for fname in fnames:             
+        for fname in fnames:
             spec_path = os.path.join(root, fname)
-            if BusDef.is_spec_bus_def(spec_path):     
+            if BusDef.is_spec_bus_def(spec_path):
                 spec_paths.append(spec_path)
 
-    bus_defs = []                
+    bus_defs = []
     logging.info('loading {} bus specs'.format(len(spec_paths)))
     for spec_path in spec_paths:
-        bus_defs.extend(BusDef.bus_defs_from_spec(spec_path))                
+        bus_defs.extend(BusDef.bus_defs_from_spec(spec_path))
 
     logging.info('  - done, loaded {} bus defs with {} required and {} optional ports '.format(
         len(bus_defs),
@@ -85,9 +85,9 @@ def _get_bus_pairings(bt, bus_defs):
 
         i_bus_pairings.append((nid, l_fcost, interface, i_bus_defs))
         nid_cost_map[nid] = l_fcost
-    
+
     # prune port groups in which the lowest fcost is too high to warrant
-    # more expensive bus matching 
+    # more expensive bus matching
     # NOTE don't bother trying to match a particular port group if all the
     # ports in that group potentially have a better assignment within
     # different groups based on fcost
@@ -102,9 +102,9 @@ def _get_bus_pairings(bt, bus_defs):
     #print('opt i_bus_pairings', len(opt_i_bus_pairings))
 
     return opt_i_bus_pairings
-    
+
 def _get_initial_bus_matches(bt, i_bus_pairings):
-    
+
     # perform bus mappings for chosen subset to determine lowest cost bus
     # mapping for each port group
     i_bus_mappings = []
@@ -125,7 +125,7 @@ def _get_initial_bus_matches(bt, i_bus_pairings):
         bus_mappings.sort(key=lambda bm: bm.cost)
         lcost = bus_mappings[0].cost
         nid_cost_map[nid] = lcost
-    
+
         i_bus_mappings.append((
             nid,
             lcost,
@@ -147,7 +147,7 @@ def get_bus_matches(ports, bus_defs):
     logging.info('initial bus pairing with port groups')
     opt_i_bus_pairings = _get_bus_pairings(bt, bus_defs)
     logging.info('  - done')
-    
+
     logging.info('bus mapping')
     opt_i_bus_mappings = _get_initial_bus_matches(bt, opt_i_bus_pairings)
     logging.info('  - done')
@@ -176,12 +176,12 @@ def main():
         '--debug',
         action='store_true',
         help='dump debug format',
-    
+
     )
     parser.add_argument(
         'component_json5',
         help='input component.json5 with port list of top-level module',
-    
+
     )
     if len(sys.argv) == 1:
         parser.print_help(sys.stderr)
@@ -220,4 +220,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
