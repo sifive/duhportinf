@@ -1,4 +1,4 @@
-json5>=0.6.1
+json5>=0.8.5
 cvxopt>=1.2.2
 scipy>=0.19.1
 numpy>=1.13.3
