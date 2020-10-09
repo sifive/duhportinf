@@ -16,9 +16,12 @@ def format_ports(in_ports):
     """
     fmt_ports = []
     for name, pw in in_ports.items():
-        try:
+        if isinstance(pw, dict): 
+          w, d = pw['width'], pw['direction']
+        else: 
+          try:
             w, d = np.abs(pw), np.sign(pw)
-        except Exception as e:
+          except Exception as e:
             #print('Warning', (name, pw), 'not correctly parsed')
             w, d = None, np.sign(-1) if pw[0] == '-' else np.sign(1)
         fmt_ports.append((name, w, d))
@@ -55,12 +58,12 @@ def get_unassigned_ports(component_json):
         vkey = 'viewRef'
         if interface['busType'] == 'bundle':
             pns_ = flatten([
-            _get_bundle_ports(at[pmkey]) for at in interface[atkey]
+            _get_bundle_ports(at[pmkey]) for at in interface[atkey] 
                     if at[vkey] == 'RTLview'
             ])
         else:
             pns_ = flatten([
-                at[pmkey].values() for at in interface[atkey]
+                at[pmkey].values() for at in interface[atkey] 
                     if at[vkey] == 'RTLview'
             ])
         nv_pns = [p for p in pns_ if type(p) == str]
@@ -97,7 +100,7 @@ def words_from_name(name):
     words = name.split('_')
     return words
 
-def flatten(l):
+def flatten(l): 
     return [e for ll in l for e in ll]
 
 def is_range(digits):
@@ -117,7 +120,7 @@ def common_prefix(words):
     n2 = max(words)
     for i, c in enumerate(n1):
         if c != n2[i]:
-            return n1[:i]
+            return n1[:i] 
     return n1
 
 def get_tokens(n):
@@ -173,7 +176,7 @@ def progress_bar(
     decimals = 1,
     length = 100,
     fill = 'x',
- ):
+ ): 
     """
     referenced from: https://stackoverflow.com/questions/3173320/
 
@@ -190,13 +193,15 @@ def progress_bar(
     # hacky fix so not messing with stdout during test when logging is off
     if silent:
         return
+    if total == 0:
+        return
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
     s = '\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix)
     print(s, end = '\r')
     # erase bar and print complete
-    if iteration == total:
+    if iteration == total: 
         print('\r', ' '*len(s), '\r', end='')
 
 #--------------------------------------------------------------------------
@@ -281,7 +286,7 @@ def dump_json_bus_candidates(
             return block_obj['definitions']['pg_cnt']
         except:
             return 0
-
+    
     portgroup_objs = []
     busint_objs = []
     busint_obj_map = {}
@@ -307,7 +312,7 @@ def dump_json_bus_candidates(
             # for all ports in mapping, just include port names and exclude width+direction
             sbm_map  = {k:v for k,v in bm.sideband_mapping.items() if v != None}
             sbm_umap = [k for k,v in bm.sideband_mapping.items() if v == None]
-
+                
             mapped_sideband_ports = list(sorted(
                 sbm_map.items(),
                 key=lambda x: bm.match_cost_func(x[0], x[1]),
@@ -358,7 +363,7 @@ def dump_json_bus_candidates(
                 'abstractionTypes': [{
                     'viewRef': 'RTLview',
                     'portMaps': portmap_o if not debug else debug_portmap_o,
-                }],
+                }], 
             }
             pg_busints.append((busint_name, o))
 
@@ -371,20 +376,20 @@ def dump_json_bus_candidates(
         busint_obj_map.update({name:o for name, o in pg_busints})
 
         pgo = (
-            'portgroup_{}'.format(i),
+            'portgroup_{}'.format(i), 
             # show cost of best bus mapping
             [NoIndent(e) for e in get_cost_obj(interface, bus_mappings[0])],
             #[NoIndent(json_format(p)) for p in sorted(interface.ports)],
         )
         portgroup_objs.append(pgo)
-
+        
     # update input block object with mapped bus interfaces and alternates
     with open(component_json5) as fin:
         block_obj = json5.load(fin)
     dkey = 'definitions'
     if dkey not in block_obj:
         block_obj[dkey] = {}
-
+    
     # bump counter for the case portinf is run again
     block_obj[dkey]['pg_cnt'] = pg_cnt_base + len(i_bus_mappings)
 
@@ -401,16 +406,16 @@ def dump_json_bus_candidates(
         'component key not defined in input block object'
     comp_obj = block_obj['component']
 
-    bkey = 'busInterfaces'
+    bkey = 'busInterfaces' 
     refs = [] if bkey not in comp_obj else comp_obj[bkey]
     refs.extend(busint_refs)
     comp_obj[bkey] = [NoIndent(o) for o in refs]
 
-    abkey = 'busInterfaceAlts'
-    refs = [] if abkey not in comp_obj else comp_obj[abkey]
+    abkey = 'busInterfaceAlts' 
+    refs = [] if abkey not in comp_obj else comp_obj[abkey] 
     refs.extend(busint_alt_refs)
     comp_obj[abkey] = [NoIndent(o) for o in refs]
-
+    
     if debug:
         block_obj = [
             ('portGroups', portgroup_objs),
@@ -435,12 +440,12 @@ def dump_json_bundles(
 
     def ref_from_name(name):
         return {'$ref': '#/definitions/bundleDefinitions/{}'.format(name)}
-
+    
     bundle_objs = []
     bundle_refs = []
     bundle_obj_map = {}
     bnames = set()
-    for i, bundle in enumerate(bundles):
+    for i, bundle in enumerate(bundles): 
         refname = 'bundle-{}'.format(bundle.name)
         o = {
             'name': bundle.name,
@@ -449,7 +454,7 @@ def dump_json_bundles(
             'abstractionTypes': [{
                 'viewRef': 'RTLview',
                 'portMaps': bundle.tree,
-            }],
+            }], 
         }
         bundle_objs.append(o)
         bundle_refs.append(ref_from_name(refname))
@@ -467,13 +472,13 @@ def dump_json_bundles(
     assert 'component' in block_obj, \
         'component key not defined in input block object'
     comp_obj = block_obj['component']
-    bkey = 'busInterfaces'
+    bkey = 'busInterfaces' 
     if bkey not in comp_obj:
         comp_obj[bkey] = []
     refs = comp_obj[bkey]
     refs.extend(bundle_refs)
     comp_obj[bkey] = [NoIndent(r) for r in refs]
-    abkey = 'busInterfaceAlts'
+    abkey = 'busInterfaceAlts' 
     if abkey in comp_obj:
         comp_obj[abkey] = [NoIndent(o) for o in comp_obj[abkey]]
 
@@ -485,3 +490,4 @@ def dump_json_bundles(
         with open(output, 'w') as fout:
             fout.write(s)
     return
+
