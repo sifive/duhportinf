@@ -1,32 +1,47 @@
 {
   "name": "duhportinf",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "library to match flat named port list to library of bus specifications",
-  "scripts": {
-    "preinstall": ".npm-install/check-py.sh",
-    "gen-reqs": ".npm-install/gen-local-req.py requirements.txt local-pylib-requirements.txt",
-    "install-pyreqs": "pip3 install --target $PWD/pylib -r local-pylib-requirements.txt",
-    "install": "npm run -s gen-reqs && npm run -s install-pyreqs && pip3 install --target $PWD/pylib ."
+  "license": "Apache-2.0",
+  "author": "alex bishara",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib",
+    "bin"
+  ],
+  "engines": {
+    "node": ">=22"
   },
   "bin": {
-    "duh-portinf": ".npm-install/duhportinf-bin.py",
-    "duh-portbundler": ".npm-install/duhportbundler-bin.py"
+    "duh-portbundler": "bin/duh-portbundler.js",
+    "duh-portinf": "bin/duh-portinf.js"
   },
+  "scripts": {
+    "test": "eslint lib test bin && c8 --reporter=text mocha test/*.js"
+  },
+  "dependencies": {
+    "duh-bus": "^1.0.0",
+    "json5": "^2.2.3"
+  },
+  "devDependencies": {
+    "@drom/eslint-config": "^1.0.0",
+    "c8": "^12.0.0",
+    "chai": "^6.2.2",
+    "eslint": "^10.0.0",
+    "globals": "^17.12.0",
+    "mocha": "^12.0.1"
+  },
+  "homepage": "https://github.com/sifive/duhportinf#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sifive/duhportinf.git"
   },
-  "keywords": [
-    "duh",
-    "inference"
-  ],
-  "author": "alex bishara",
-  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/sifive/duhportinf/issues"
   },
-  "homepage": "https://github.com/sifive/duhportinf#readme",
-  "dependencies": {
-    "duh-bus": "^0.5.0"
-  }
+  "keywords": [
+    "duh",
+    "inference"
+  ]
 }
